@@ -38,8 +38,6 @@
         whitelist: { subreddits: [], users: [] },
         blacklist: { subreddits: [], users: [] },
         uiVisible: true, activeTab: 'settings',
-        paused: false,
-        preview: false,
         // Optional custom replacement text used when action is replace_text
         replaceText: null,
         uiPosition: {
@@ -290,10 +288,6 @@
                      <button id="racf-close-btn" class="racf-close-btn" title="Close Panel">×</button>
                      <div id="racf-settings-content" class="racf-tab-content active">
                          <h4>Filter Settings</h4>
-                         <div class="racf-section racf-buttons">
-                             <button id="racf-toggle-pause-btn">Pause Filters</button>
-                             <button id="racf-toggle-preview-btn">Preview Mode</button>
-                         </div>
                          <div class="racf-add-rule-section">
                              <div class="racf-input-group">
                                  <label for="racf-rule-input">Rule Text:</label>
@@ -430,10 +424,6 @@
                 #racf-reset-stats-btn:hover { background-color: #c82333; border-color: #bd2130; }
                 #racf-clear-imported-btn { background-color: #dc3545; color: #fff; border-color: #dc3545; }
                 #racf-clear-imported-btn:hover { background-color: #c82333; border-color: #bd2130; }
-                #racf-toggle-pause-btn { background-color: #ffc107; color: #212529; border-color: #ffc107; }
-                #racf-toggle-pause-btn.toggle-active { background-color: #e0a800; color: #fff; border-color: #d39e00; }
-                #racf-toggle-preview-btn { background-color: #17a2b8; color: #fff; border-color: #17a2b8; }
-                #racf-toggle-preview-btn.toggle-active { background-color: #117a8b; color: #fff; border-color: #0f6674; }
                 #racf-rule-list button.racf-remove-btn { background: #dc3545; border: 1px solid #dc3545; color: #fff; padding: 3px 7px; font-size: 11px; margin-left: 5px; flex-shrink: 0; line-height: 1; }
                 #racf-rule-list button.racf-remove-btn:hover { background-color: #c82333; border-color: #bd2130; }
                 #racf-rule-list, #racf-stats-rule-list, #racf-imported-rule-list { list-style: none; padding: 0; max-height: 180px; overflow-y: auto; border: 1px solid #eee; margin-top: 5px; background: #fff; }
@@ -492,13 +482,11 @@
                  }
                  .${SCRIPT_PREFIX}-hide.thing.comment,
                  .${SCRIPT_PREFIX}-hide.shreddit-comment { }
-                .${SCRIPT_PREFIX}-text-replaced .usertext-body .md p,
-                .${SCRIPT_PREFIX}-text-replaced div[slot="comment"] p {
-                    color: grey; font-style: italic; margin: 0; padding: 5px 0;
-                }
-                .${SCRIPT_PREFIX}-preview { outline: 2px dashed orange !important; outline-offset: -2px; position: relative; }
-                .${SCRIPT_PREFIX}-preview::after { content: 'Preview'; position: absolute; top: 2px; right: 2px; background: rgba(255,165,0,0.9); color: #000; font-weight: 700; font-size: 10px; padding: 1px 4px; border-radius: 2px; }
-            `;
+                 .${SCRIPT_PREFIX}-text-replaced .usertext-body .md p,
+                 .${SCRIPT_PREFIX}-text-replaced div[slot="comment"] p {
+                     color: grey; font-style: italic; margin: 0; padding: 5px 0;
+                 }
+             `;
         }
 
         addUIEventListeners() {
@@ -591,33 +579,6 @@
                     }
                 });
             }
-            const togglePauseBtn = q('#racf-toggle-pause-btn');
-            const togglePreviewBtn = q('#racf-toggle-preview-btn');
-            if (togglePauseBtn) {
-                togglePauseBtn.addEventListener('click', (e) => { e.stopPropagation(); this.togglePause(); });
-            }
-            if (togglePreviewBtn) {
-                togglePreviewBtn.addEventListener('click', (e) => { e.stopPropagation(); this.togglePreview(); });
-            }
-
-            // Global keyboard shortcuts
-            window.addEventListener('keydown', (e) => {
-                const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
-                if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.isComposing) return;
-                const ctrlShift = e.ctrlKey && e.shiftKey;
-                if (!ctrlShift) return;
-                switch (e.key.toLowerCase()) {
-                    case 'p': // Ctrl+Shift+P toggle pause
-                        e.preventDefault(); this.togglePause(); break;
-                    case 'v': // Ctrl+Shift+V toggle preview
-                        e.preventDefault(); this.togglePreview(); break;
-                    case 'o': // Ctrl+Shift+O toggle panel visibility
-                        e.preventDefault(); this.toggleUIVisibility(); break;
-                    case 'r': // Ctrl+Shift+R re-apply filters
-                        e.preventDefault(); this.processedNodes = new WeakSet(); this.originalContentCache = new WeakMap(); this.applyFilters(document.body); break;
-                    default: break;
-                }
-            });
             q('#racf-close-btn').addEventListener('click', (e) => {
                  e.stopPropagation(); // Prevent drag start when clicking close button
                  this.toggleUIVisibility(false)
@@ -755,19 +716,6 @@
 
             const q = (s) => this.shadowRoot.querySelector(s);
             const qa = (s) => this.shadowRoot.querySelectorAll(s);
-            // Update control buttons state
-            const pauseBtn = q('#racf-toggle-pause-btn');
-            const previewBtn = q('#racf-toggle-preview-btn');
-            if (pauseBtn) {
-                pauseBtn.classList.toggle('toggle-active', !!this.config.paused);
-                pauseBtn.textContent = this.config.paused ? 'Resume Filters' : 'Pause Filters';
-                pauseBtn.title = this.config.paused ? 'Ctrl+Shift+P' : 'Ctrl+Shift+P';
-            }
-            if (previewBtn) {
-                previewBtn.classList.toggle('toggle-active', !!this.config.preview);
-                previewBtn.textContent = this.config.preview ? 'Disable Preview' : 'Preview Mode';
-                previewBtn.title = 'Ctrl+Shift+V';
-            }
             const ruleListEl = q('#racf-rule-list');
             if (ruleListEl) {
                 ruleListEl.innerHTML = '';
@@ -844,13 +792,7 @@
         handleFilterTypeChange(event) { const{value,checked}=event.target; if(!this.config.filterTypes)this.config.filterTypes=[]; const index=this.config.filterTypes.indexOf(value); if(checked&&index===-1){this.config.filterTypes.push(value);}else if(!checked&&index>-1){this.config.filterTypes.splice(index,1);} this.saveConfigAndApplyFilters(); }
         initializeObserver() { if(!window.MutationObserver){this.log("No MutationObserver");return;} if(this.observer){this.observer.disconnect();} this.observer=new MutationObserver(this.mutationCallback.bind(this)); this.observer.observe(document.body,{childList:true,subtree:true}); this.log("Observer init."); }
         mutationCallback(mutationsList) { const nTC=new Set(); let hRC=false; for(const m of mutationsList){if(m.type==='childList'&&m.addedNodes.length>0){m.addedNodes.forEach(n=>{if(n.nodeType===Node.ELEMENT_NODE&&!n.id?.startsWith(SCRIPT_PREFIX)&&!n.closest(`#${SCRIPT_PREFIX}-ui-container`)){if(n.matches&&(n.matches(this.selectors.post)||n.matches(this.selectors.comment))){nTC.add(n);hRC=true;} if(n.querySelectorAll){try{n.querySelectorAll(`${this.selectors.post},${this.selectors.comment}`).forEach(el=>{nTC.add(el);hRC=true;});}catch(e){this.debugLog(`Query error: ${e.message}`,n);}}}});}} if(hRC&&nTC.size>0){this.debugLog(`Mutation: ${nTC.size} new nodes.`); this.applyFilters(Array.from(nTC));} }
-        applyFilters(nodesOrRoot) { if (this.config.paused && !this.config.preview) { this.debugLog('Paused: skipping applyFilters'); return; } let iTP=[]; const sT=performance.now(); const eS=new Set(); const cE=(r)=>{if(!r||r.nodeType!==Node.ELEMENT_NODE)return; try{if(r.matches&&(r.matches(this.selectors.post)||r.matches(this.selectors.comment))){if(!this.processedNodes.has(r)){eS.add(r);}} r.querySelectorAll(`${this.selectors.post},${this.selectors.comment}`).forEach(el=>{if(!this.processedNodes.has(el)){eS.add(el);}});}catch(e){this.log(`Collect error: ${e.message}`);console.error("Collect Node:",r,e);}}; if(Array.isArray(nodesOrRoot)){nodesOrRoot.forEach(n=>cE(n));}else if(nodesOrRoot?.nodeType===Node.ELEMENT_NODE){cE(nodesOrRoot);}else{this.debugLog("Bad applyFilters input:",nodesOrRoot);return;} iTP=Array.from(eS); if(iTP.length===0){return;} this.debugLog(`Filtering ${iTP.length} new nodes...`); let sC=false; let pC=0; let fC=0; let wC=0; iTP.forEach(n=>{this.processedNodes.add(n);pC++;sC=true; try{const fR=this.shouldFilterNode(n); if(fR.whitelisted){wC++; if (!this.config.preview) { this.unfilterNode(n); } this.debugLog(`Whitelisted: ${fR.reason}`,n);}else if(fR.filter){ const nT=fR.nodeType; if (this.config.preview) { this.previewNode(n, fR.reason, nT); } else { fC++; const eA=this.getEffectiveAction(this.config.filterAction,nT); if(nT&&this.stats.filteredByType){this.stats.filteredByType[nT]=(this.stats.filteredByType[nT]||0)+1;} if(eA&&this.stats.filteredByAction){this.stats.filteredByAction[eA]=(this.stats.filteredByAction[eA]||0)+1;} const rST=fR.ruleText||`type:${fR.reason}`; if(rST&&this.stats.filteredByRule){this.stats.filteredByRule[rST]=(this.stats.filteredByRule[rST]||0)+1;} this.filterNode(n,fR.reason,nT,eA); this.debugLog(`Filtered (${eA}): ${fR.reason}`,n);} }else{ if (!this.config.preview) { this.unfilterNode(n);} this.debugLog(`Not filtered: ${fR.reason}`,n);}}catch(err){this.log(`Filter node error: ${err.message}`);console.error(`Filter error:`,err,n); try{this.unfilterNode(n);}catch{}}}); if(sC){ if (!this.config.preview && !this.config.paused) { this.stats.totalProcessed+=pC; this.stats.totalFiltered+=fC; this.stats.totalWhitelisted+=wC; this.debouncedSaveStats(); } if(this.uiUpdateDebounceTimer)clearTimeout(this.uiUpdateDebounceTimer); this.uiUpdateDebounceTimer=setTimeout(()=>{if(this.config.uiVisible){this.updateUI();} this.uiUpdateDebounceTimer=null;},300);} this.lastFilterTime=performance.now(); const dur=this.lastFilterTime-sT; if(iTP.length>0){this.debugLog(`Filtering ${iTP.length} nodes took ${dur.toFixed(2)} ms.`);} }
-
-        previewNode(n, reason, nT) { try { this.unfilterNode(n); const sR = reason.substring(0,200)+(reason.length>200?'...':''); const fAV=`${SCRIPT_PREFIX}: Preview (${sR})`; n.classList.add(`${SCRIPT_PREFIX}-preview`); n.setAttribute('data-racf-filter-reason', fAV); n.title = fAV; } catch(_){} }
-
-        clearAllPreview() { try { document.querySelectorAll(`.${SCRIPT_PREFIX}-preview`).forEach(el => { el.classList.remove(`${SCRIPT_PREFIX}-preview`); if (el.hasAttribute('data-racf-filter-reason')) el.removeAttribute('data-racf-filter-reason'); if (el.title && el.title.startsWith(`${SCRIPT_PREFIX}:`)) el.removeAttribute('title'); }); } catch(_){} }
-
-        clearAllFiltersInDOM() { try { const cls = ['hide','blur','border','collapse']; document.querySelectorAll(cls.map(a=>`.${SCRIPT_PREFIX}-${a}`).join(',')+`, .${SCRIPT_PREFIX}-text-replaced`).forEach(el=>{ this.unfilterNode(el); }); } catch(_){} }
+        applyFilters(nodesOrRoot) { let iTP=[]; const sT=performance.now(); const eS=new Set(); const cE=(r)=>{if(!r||r.nodeType!==Node.ELEMENT_NODE)return; try{if(r.matches&&(r.matches(this.selectors.post)||r.matches(this.selectors.comment))){if(!this.processedNodes.has(r)){eS.add(r);}} r.querySelectorAll(`${this.selectors.post},${this.selectors.comment}`).forEach(el=>{if(!this.processedNodes.has(el)){eS.add(el);}});}catch(e){this.log(`Collect error: ${e.message}`);console.error("Collect Node:",r,e);}}; if(Array.isArray(nodesOrRoot)){nodesOrRoot.forEach(n=>cE(n));}else if(nodesOrRoot?.nodeType===Node.ELEMENT_NODE){cE(nodesOrRoot);}else{this.debugLog("Bad applyFilters input:",nodesOrRoot);return;} iTP=Array.from(eS); if(iTP.length===0){return;} this.debugLog(`Filtering ${iTP.length} new nodes...`); let sC=false; let pC=0; let fC=0; let wC=0; iTP.forEach(n=>{this.processedNodes.add(n);pC++;sC=true; try{const fR=this.shouldFilterNode(n); if(fR.whitelisted){wC++;this.unfilterNode(n);this.debugLog(`Whitelisted: ${fR.reason}`,n);}else if(fR.filter){fC++; const nT=fR.nodeType; const eA=this.getEffectiveAction(this.config.filterAction,nT); if(nT&&this.stats.filteredByType){this.stats.filteredByType[nT]=(this.stats.filteredByType[nT]||0)+1;} if(eA&&this.stats.filteredByAction){this.stats.filteredByAction[eA]=(this.stats.filteredByAction[eA]||0)+1;} const rST=fR.ruleText||`type:${fR.reason}`; if(rST&&this.stats.filteredByRule){this.stats.filteredByRule[rST]=(this.stats.filteredByRule[rST]||0)+1;} this.filterNode(n,fR.reason,nT,eA);this.debugLog(`Filtered (${eA}): ${fR.reason}`,n);}else{this.unfilterNode(n);this.debugLog(`Not filtered: ${fR.reason}`,n);}}catch(err){this.log(`Filter node error: ${err.message}`);console.error(`Filter error:`,err,n); try{this.unfilterNode(n);}catch{}}}); if(sC){this.stats.totalProcessed+=pC;this.stats.totalFiltered+=fC;this.stats.totalWhitelisted+=wC; this.debouncedSaveStats(); if(this.uiUpdateDebounceTimer)clearTimeout(this.uiUpdateDebounceTimer); this.uiUpdateDebounceTimer=setTimeout(()=>{if(this.config.uiVisible){this.updateUI();} this.uiUpdateDebounceTimer=null;},300);} this.lastFilterTime=performance.now(); const dur=this.lastFilterTime-sT; if(iTP.length>0){this.debugLog(`Filtering ${iTP.length} nodes took ${dur.toFixed(2)} ms.`);} }
         getEffectiveAction(cA,nT){if(nT!=='comments'){if(cA==='collapse'||cA==='replace_text'){return'hide';}} return cA;}
         shouldFilterNode(node){ let nT=null; if(node.matches(this.selectors.post))nT='posts'; else if(node.matches(this.selectors.comment))nT='comments'; else return{filter:false,reason:"Not target",whitelisted:false,ruleText:null,nodeType:null}; let res={filter:false,reason:"No match",whitelisted:false,ruleText:null,nodeType:nT}; if(!(this.config.filterTypes||[]).includes(nT)){res.reason=`Type ${nT} disabled`;return res;} const sub=this.extractSubreddit(node,nT)?.toLowerCase()??null; const aut=this.extractAuthor(node,nT)?.toLowerCase()??null; if(sub&&(this.config.blacklist?.subreddits||[]).includes(sub)){return{...res,filter:true,reason:`BL Sub: r/${sub}`,ruleText:`bl-sub:${sub}`};} if(aut&&(this.config.blacklist?.users||[]).includes(aut)){return{...res,filter:true,reason:`BL User: u/${aut}`,ruleText:`bl-user:${aut}`};} if(sub&&(this.config.whitelist?.subreddits||[]).includes(sub)){return{...res,whitelisted:true,reason:`WL Sub: r/${sub}`};} if(aut&&(this.config.whitelist?.users||[]).includes(aut)){return{...res,whitelisted:true,reason:`WL User: u/${aut}`};} let cC={title:null,body:null,checked:false}; for(const rule of(this.config.rules||[])){let match=false; const rST=`[${rule.type}${rule.isRegex?'(R)':''}${rule.normalize?'(N)':''}${rule.target?`-${rule.target}`:''}] ${rule.text}`; let rS=""; try{switch(rule.type){case'keyword':const targ=rule.target||'both'; if(!cC.checked){const ex=this.extractContent(node,nT);cC.title=ex.title;cC.body=ex.body;cC.checked=true;this.debugLog(`Extracted: T:${!!cC.title}, B:${!!cC.body}`,node);} let cTT=[]; let tA=[]; if((targ==='title'||targ==='both')&&cC.title){cTT.push(cC.title);tA.push('title');} if((targ==='body'||targ==='both')&&cC.body){cTT.push(cC.body);tA.push('body');} if(cTT.length===0){this.debugLog(`Skip rule ${rST}: no content for target '${targ}'`,node);continue;} rS=` in ${tA.join('&')}`; let patt=rule.text; let tF; if(rule.isRegex){const rM=patt.match(/^\/(.+)\/([gimyus]*)$/); if(rM){try{const rgx=new RegExp(rM[1],rM[2]);tF=(t)=>rgx.test(t);rS+=` (Regex${rgx.flags.includes('i')?', Insens.':''})`;}catch(rE){this.log(`Rule err (bad regex) ${rST}: ${rE.message}`);continue;}}else{this.log(`Rule err (malformed regex) ${rST}`);continue;}}else{const uN=rule.normalize; const iCS=rule.caseSensitive; const cP=uN?this.normalizeText(patt):(iCS?patt:patt.toLowerCase()); tF=(t)=>{if(!t)return false; const cCo=uN?this.normalizeText(t):(iCS?t:t.toLowerCase()); return cCo.includes(cP);}; rS+=`${uN?' (Norm.)':(iCS?' (Case Sens.)':' (Case Insens.)')}`;} match=cTT.some(t=>tF(t)); break; case'user':if(!aut)continue; match=aut===rule.text; rS=` (author: u/${aut})`; break; case'subreddit':if(!sub||nT!=='posts')continue; match=sub===rule.text; rS=` (sub: r/${sub})`; break;} if(match){const sRD=this.domPurify.sanitize(rule.text,{USE_PROFILES:{html:false}}); return{...res,filter:true,reason:`Rule: [${rule.type}] '${sRD}'${rS}`,ruleText:rST};}}catch(e){this.log(`Rule proc error ${rST}: ${e.message}`);console.error(`Rule error:`,e,rule,node);}} res.reason="No matches"; return res;}
         extractContent(n,nT){const r={title:null,body:null};try{if(nT==='posts'&&this.selectors.postTitleSelector){const tE=n.querySelector(this.selectors.postTitleSelector);if(tE){r.title=tE.textContent?.trim()||null;if(r.title)r.title=r.title.replace(/\s+/g,' ');}} let bS=null; if(nT==='posts'&&this.selectors.postBodySelector){bS=this.selectors.postBodySelector;}else if(nT==='comments'&&this.selectors.commentBodySelector){bS=this.selectors.commentBodySelector;} if(bS){const bE=n.querySelector(bS);if(bE){r.body=bE.textContent?.trim()||null;if(r.body)r.body=r.body.replace(/\s+/g,' ');}else if(this.isOldReddit&&nT==='posts'){const oPB=n.querySelector('.expando .usertext-body .md');if(oPB){r.body=oPB.textContent?.trim()||null;if(r.body)r.body=r.body.replace(/\s+/g,' ');}}}}catch(e){this.log(`Extract content err (t:${nT}): ${e.message}`);console.error("Extract Err:",n,e);} return r;}
@@ -948,16 +890,6 @@
         registerMenuCommands() { GM_registerMenuCommand('Toggle Filter Panel',()=>this.toggleUIVisibility()); GM_registerMenuCommand('Re-apply All Filters',()=>{this.log(`Manual re-filter.`);this.processedNodes=new WeakSet();this.originalContentCache=new WeakMap();this.applyFilters(document.body);}); GM_registerMenuCommand('Reset Filter Statistics',()=>this.resetStats()); }
         toggleUIVisibility(forceState=null) { const sBV=forceState!==null?forceState:!this.config.uiVisible; if(sBV!==this.config.uiVisible){this.config.uiVisible=sBV; if(this.uiContainer){this.uiContainer.style.display=this.config.uiVisible?'block':'none';} this.saveConfig(); if(this.config.uiVisible){this.updateUI();} const oB=document.getElementById(`${SCRIPT_PREFIX}-options-btn`); if(oB){oB.textContent=this.config.uiVisible?'Ocultar RCF':'Mostrar RCF';oB.title=this.config.uiVisible?'Ocultar Panel':'Mostrar Panel';}}}
         async saveConfigAndApplyFilters() { await this.saveConfig(); if(this.filterApplyDebounceTimer)clearTimeout(this.filterApplyDebounceTimer); this.filterApplyDebounceTimer=setTimeout(()=>{this.log(`Config change, re-filtering...`);this.processedNodes=new WeakSet();this.originalContentCache=new WeakMap();this.applyFilters(document.body);this.filterApplyDebounceTimer=null;},150); }
-
-        togglePause() { this.config.paused = !this.config.paused; if (this.config.paused) { this.clearAllFiltersInDOM(); this.clearAllPreview(); } else { this.clearAllPreview(); this.processedNodes=new WeakSet(); this.originalContentCache=new WeakMap(); this.applyFilters(document.body); } this.saveConfig(); this.updateUI(); this.log(`Paused: ${this.config.paused}`); }
-
-        togglePreview() { this.config.preview = !this.config.preview; if (this.config.preview) { // entering preview
-                this.clearAllFiltersInDOM(); this.processedNodes=new WeakSet(); this.applyFilters(document.body);
-            } else { // leaving preview
-                this.clearAllPreview(); if (!this.config.paused) { this.processedNodes=new WeakSet(); this.originalContentCache=new WeakMap(); this.applyFilters(document.body); }
-            }
-            this.saveConfig(); this.updateUI(); this.log(`Preview: ${this.config.preview}`);
-        }
 
     } // --- End RedditFilter Class ---
 
