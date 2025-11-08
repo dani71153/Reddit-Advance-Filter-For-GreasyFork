@@ -20,3 +20,14 @@ Corrige HTML de la lista (comillas/template) para que funcionen los botones.
 Conecta listeners de búsqueda/orden/tester dentro de addUIEventListeners.
 Estilos para nuevos botones y listas.
 Config: añade paused, preview, replaceText y uiState (ruleSearch/ruleSort).
+style(ui): unifica estilo de botón "Ex" y muestra "x" en eliminar
+
+- Botón "Ex": se mantiene/asegura el mismo estilo gris que los botones ↑/↓ (clase `racf-exc-btn`) para coherencia visual.
+- Botón eliminar: ahora se muestra como "x" en minúscula aplicando `text-transform: lowercase` en `#racf-rule-list button.racf-remove-btn`.
+- Sin cambios en la lógica ni en el render; ajuste puramente de estilos.
+
+Archivos tocados
+- V0.js:471 — agrega `text-transform: lowercase` al botón eliminar.
+- V0.js:475–476 — se confirma coherencia de estilos de `racf-exc-btn` con los de mover.
+
+Nota: si prefieres cambiar el carácter del DOM a 'x' en lugar de transformarlo por CSS, puedo actualizar el `innerHTML` del render de reglas.

@@ -28,7 +28,7 @@
     const CONFIG_STORAGE_KEY = 'config_v1.7';
     const STATS_STORAGE_KEY = 'stats_v1';
     const RULE_TYPES = ['keyword', 'user', 'subreddit'];
-    const FILTER_ACTIONS = ['hide', 'blur', 'border', 'collapse', 'replace_text', 'tap_reveal', 'blur_click'];
+    const FILTER_ACTIONS = ['hide', 'blur', 'border', 'collapse', 'replace_text'];
     const DEBUG_LOGGING = false; // Set to true for detailed console logs
 
     // --- Default Structures ---
@@ -468,12 +468,10 @@
                 #racf-toggle-pause-btn.toggle-active { background-color: #e0a800; color: #fff; border-color: #d39e00; }
                 #racf-toggle-preview-btn { background-color: #17a2b8; color: #fff; border-color: #17a2b8; }
                 #racf-toggle-preview-btn.toggle-active { background-color: #117a8b; color: #fff; border-color: #0f6674; }
-                #racf-rule-list button.racf-remove-btn { background: #dc3545; border: 1px solid #dc3545; color: #fff; padding: 3px 7px; font-size: 11px; margin-left: 5px; flex-shrink: 0; line-height: 1; text-transform: lowercase; }
+                #racf-rule-list button.racf-remove-btn { background: #dc3545; border: 1px solid #dc3545; color: #fff; padding: 3px 7px; font-size: 11px; margin-left: 5px; flex-shrink: 0; line-height: 1; }
                 #racf-rule-list button.racf-remove-btn:hover { background-color: #c82333; border-color: #bd2130; }
                 #racf-rule-list button.racf-move-btn { background: #6c757d; border: 1px solid #6c757d; color: #fff; padding: 3px 7px; font-size: 11px; margin-left: 5px; flex-shrink: 0; line-height: 1; }
                 #racf-rule-list button.racf-move-btn:hover { background-color: #5a6268; border-color: #545b62; }
-                #racf-rule-list button.racf-exc-btn { background: #6c757d; border: 1px solid #6c757d; color: #fff; padding: 3px 7px; font-size: 11px; margin-left: 5px; flex-shrink: 0; line-height: 1; }
-                #racf-rule-list button.racf-exc-btn:hover { background-color: #5a6268; border-color: #545b62; }
                 #racf-rule-list, #racf-stats-rule-list, #racf-imported-rule-list { list-style: none; padding: 0; max-height: 180px; overflow-y: auto; border: 1px solid #eee; margin-top: 5px; background: #fff; }
                 #racf-rule-list li, #racf-stats-rule-list li, #racf-imported-rule-list li { padding: 6px 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
                 #racf-rule-list li:last-child, #racf-stats-rule-list li:last-child, #racf-imported-rule-list li:last-child { border-bottom: none; }
@@ -539,9 +537,6 @@
                 }
                 .${SCRIPT_PREFIX}-preview { outline: 2px dashed orange !important; outline-offset: -2px; position: relative; }
                 .${SCRIPT_PREFIX}-preview::after { content: 'Preview'; position: absolute; top: 2px; right: 2px; background: rgba(255,165,0,0.9); color: #000; font-weight: 700; font-size: 10px; padding: 1px 4px; border-radius: 2px; }
-                .${SCRIPT_PREFIX}-tap_reveal { filter: blur(10px) !important; position: relative; cursor: pointer; }
-                .${SCRIPT_PREFIX}-tap_reveal::after { content: 'Tap to reveal'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 6px 10px; border-radius: 6px; font-weight: 700; font-size: 12px; }
-                .${SCRIPT_PREFIX}-blur_click { filter: blur(6px) !important; cursor: pointer; }
             `;
         }
 
@@ -587,7 +582,6 @@
                 const removeButton = e.target.closest('button.racf-remove-btn');
                 const moveUpBtn = e.target.closest('button.racf-move-up');
                 const moveDownBtn = e.target.closest('button.racf-move-down');
-                const excBtn = e.target.closest('button.racf-exc-btn');
                 if (removeButton) {
                      // stopPropagation() already prevents drag, button click proceeds
                     const ruleIndex = parseInt(removeButton.dataset.ruleIndex, 10);
@@ -609,9 +603,6 @@
                             this.updateUI();
                         }
                     }
-                } else if (excBtn) {
-                    const ruleIndex = parseInt(excBtn.dataset.ruleIndex, 10);
-                    if (!isNaN(ruleIndex)) { this.editRuleExceptions(ruleIndex); }
                 }
             });
 
@@ -902,10 +893,8 @@
                     const typeTitle = `Type: ${rule.type}`; const regexTitle = rule.isRegex ? ' (Regex)' : '';
                     const caseTitle = (rule.type === 'keyword' && !rule.isRegex) ? (rule.caseSensitive ? ' (Case Sensitive)' : ' (Case Insensitive)') : '';
                     const targetTitle = `Applies to: ${rule.target || 'both'}`; const normTitle = rule.normalize ? ' (Normalized)' : '';
-                    const hasExcept = (rule.except && ((rule.except.subreddits||[]).length || (rule.except.users||[]).length));
-                    const excBadge = hasExcept ? '<small title="Exceptions active">[Ex]</small>' : '';
                     const positionControls = (this.config.uiState?.ruleSort === 'position') ? `<button class="racf-move-btn racf-move-up" data-rule-index="${rule.__index}" title="Move Up">↑</button><button class="racf-move-btn racf-move-down" data-rule-index="${rule.__index}" title="Move Down">↓</button>` : '';
-                    li.innerHTML = `<div class="racf-rule-details"><span class="racf-rule-type-badge" title="${typeTitle}">${rule.type}</span><span class="racf-rule-text">${safeText}</span>${rule.isRegex ? `<small title="Regular Expression${caseTitle}">(R${rule.caseSensitive ? '' : 'i'})</small>` : ''}${rule.type === 'keyword' && !rule.isRegex && !rule.caseSensitive && !rule.normalize ? '<small title="Case Insensitive">(i)</small>' : ''}<small title="${targetTitle}">[${rule.target || 'both'}]</small>${rule.normalize ? `<small title="${normTitle}">(Norm)</small>` : ''} ${excBadge}</div><div><button class="racf-remove-btn" data-rule-index="${rule.__index}" title="Remove Rule">X</button><button class="racf-exc-btn" data-rule-index="${rule.__index}" title="Edit Exceptions">Ex</button>${positionControls}</div>`;
+                    li.innerHTML = `<div class="racf-rule-details"><span class="racf-rule-type-badge" title="${typeTitle}">${rule.type}</span><span class="racf-rule-text">${safeText}</span>${rule.isRegex ? `<small title="Regular Expression${caseTitle}">(R${rule.caseSensitive ? '' : 'i'})</small>` : ''}${rule.type === 'keyword' && !rule.isRegex && !rule.caseSensitive && !rule.normalize ? '<small title="Case Insensitive">(i)</small>' : ''}<small title="${targetTitle}">[${rule.target || 'both'}]</small>${rule.normalize ? `<small title="${normTitle}">(Norm)</small>` : ''}</div><div><button class="racf-remove-btn" data-rule-index="${rule.__index}" title="Remove Rule">X</button>${positionControls}</div>`;
                     ruleListEl.appendChild(li);
                 });
                 const ruleCountEl = q('#racf-rule-count'); if (ruleCountEl) ruleCountEl.textContent = (this.config.rules || []).length;
@@ -976,75 +965,15 @@
         handleFilterTypeChange(event) { const{value,checked}=event.target; if(!this.config.filterTypes)this.config.filterTypes=[]; const index=this.config.filterTypes.indexOf(value); if(checked&&index===-1){this.config.filterTypes.push(value);}else if(!checked&&index>-1){this.config.filterTypes.splice(index,1);} this.saveConfigAndApplyFilters(); }
         initializeObserver() { if(!window.MutationObserver){this.log("No MutationObserver");return;} if(this.observer){this.observer.disconnect();} this.observer=new MutationObserver(this.mutationCallback.bind(this)); this.observer.observe(document.body,{childList:true,subtree:true}); this.log("Observer init."); }
         mutationCallback(mutationsList) { const nTC=new Set(); let hRC=false; for(const m of mutationsList){if(m.type==='childList'&&m.addedNodes.length>0){m.addedNodes.forEach(n=>{if(n.nodeType===Node.ELEMENT_NODE&&!n.id?.startsWith(SCRIPT_PREFIX)&&!n.closest(`#${SCRIPT_PREFIX}-ui-container`)){if(n.matches&&(n.matches(this.selectors.post)||n.matches(this.selectors.comment))){nTC.add(n);hRC=true;} if(n.querySelectorAll){try{n.querySelectorAll(`${this.selectors.post},${this.selectors.comment}`).forEach(el=>{nTC.add(el);hRC=true;});}catch(e){this.debugLog(`Query error: ${e.message}`,n);}}}});}} if(hRC&&nTC.size>0){this.debugLog(`Mutation: ${nTC.size} new nodes.`); this.applyFilters(Array.from(nTC));} }
-        applyFilters(nodesOrRoot) { if (this.config.paused && !this.config.preview) { this.debugLog('Paused: skipping applyFilters'); return; } let iTP=[]; const sT=performance.now(); const eS=new Set(); const cE=(r)=>{if(!r||r.nodeType!==Node.ELEMENT_NODE)return; try{if(r.matches&&(r.matches(this.selectors.post)||r.matches(this.selectors.comment))){if(!this.processedNodes.has(r)){eS.add(r);}} r.querySelectorAll(`${this.selectors.post},${this.selectors.comment}`).forEach(el=>{if(!this.processedNodes.has(el)){eS.add(el);}});}catch(e){this.log(`Collect error: ${e.message}`);console.error("Collect Node:",r,e);}}; if(Array.isArray(nodesOrRoot)){nodesOrRoot.forEach(n=>cE(n));}else if(nodesOrRoot?.nodeType===Node.ELEMENT_NODE){cE(nodesOrRoot);}else{this.debugLog("Bad applyFilters input:",nodesOrRoot);return;} iTP=Array.from(eS); if(iTP.length===0){return;} this.debugLog(`Filtering ${iTP.length} new nodes...`); let sC=false; let pC=0; let fC=0; let wC=0; iTP.forEach(n=>{this.processedNodes.add(n);pC++;sC=true; try{const fR=this.shouldFilterNode(n); if(fR.whitelisted){wC++; if (!this.config.preview) { this.unfilterNode(n); } this.debugLog(`Whitelisted: ${fR.reason}`,n);}else if(fR.filter){ const nT=fR.nodeType; if (this.config.preview) { this.previewNode(n, fR.reason, nT); } else { fC++; const eA=this.getEffectiveAction(this.config.filterAction,nT); if(nT&&this.stats.filteredByType){this.stats.filteredByType[nT]=(this.stats.filteredByType[nT]||0)+1;} if(eA&&this.stats.filteredByAction){this.stats.filteredByAction[eA]=(this.stats.filteredByAction[eA]||0)+1;} const rST=fR.ruleText||`type:${fR.reason}`; if(rST&&this.stats.filteredByRule){this.stats.filteredByRule[rST]=(this.stats.filteredByRule[rST]||0)+1;} this.filterNode(n,fR.reason,nT,eA,fR.matched); this.debugLog(`Filtered (${eA}): ${fR.reason}`,n);} }else{ if (!this.config.preview) { this.unfilterNode(n);} this.debugLog(`Not filtered: ${fR.reason}`,n);}}catch(err){this.log(`Filter node error: ${err.message}`);console.error(`Filter error:`,err,n); try{this.unfilterNode(n);}catch{}}}); if(sC){ if (!this.config.preview && !this.config.paused) { this.stats.totalProcessed+=pC; this.stats.totalFiltered+=fC; this.stats.totalWhitelisted+=wC; this.debouncedSaveStats(); } if(this.uiUpdateDebounceTimer)clearTimeout(this.uiUpdateDebounceTimer); this.uiUpdateDebounceTimer=setTimeout(()=>{if(this.config.uiVisible){this.updateUI();} this.uiUpdateDebounceTimer=null;},300);} this.lastFilterTime=performance.now(); const dur=this.lastFilterTime-sT; if(iTP.length>0){this.debugLog(`Filtering ${iTP.length} nodes took ${dur.toFixed(2)} ms.`);} }
+        applyFilters(nodesOrRoot) { if (this.config.paused && !this.config.preview) { this.debugLog('Paused: skipping applyFilters'); return; } let iTP=[]; const sT=performance.now(); const eS=new Set(); const cE=(r)=>{if(!r||r.nodeType!==Node.ELEMENT_NODE)return; try{if(r.matches&&(r.matches(this.selectors.post)||r.matches(this.selectors.comment))){if(!this.processedNodes.has(r)){eS.add(r);}} r.querySelectorAll(`${this.selectors.post},${this.selectors.comment}`).forEach(el=>{if(!this.processedNodes.has(el)){eS.add(el);}});}catch(e){this.log(`Collect error: ${e.message}`);console.error("Collect Node:",r,e);}}; if(Array.isArray(nodesOrRoot)){nodesOrRoot.forEach(n=>cE(n));}else if(nodesOrRoot?.nodeType===Node.ELEMENT_NODE){cE(nodesOrRoot);}else{this.debugLog("Bad applyFilters input:",nodesOrRoot);return;} iTP=Array.from(eS); if(iTP.length===0){return;} this.debugLog(`Filtering ${iTP.length} new nodes...`); let sC=false; let pC=0; let fC=0; let wC=0; iTP.forEach(n=>{this.processedNodes.add(n);pC++;sC=true; try{const fR=this.shouldFilterNode(n); if(fR.whitelisted){wC++; if (!this.config.preview) { this.unfilterNode(n); } this.debugLog(`Whitelisted: ${fR.reason}`,n);}else if(fR.filter){ const nT=fR.nodeType; if (this.config.preview) { this.previewNode(n, fR.reason, nT); } else { fC++; const eA=this.getEffectiveAction(this.config.filterAction,nT); if(nT&&this.stats.filteredByType){this.stats.filteredByType[nT]=(this.stats.filteredByType[nT]||0)+1;} if(eA&&this.stats.filteredByAction){this.stats.filteredByAction[eA]=(this.stats.filteredByAction[eA]||0)+1;} const rST=fR.ruleText||`type:${fR.reason}`; if(rST&&this.stats.filteredByRule){this.stats.filteredByRule[rST]=(this.stats.filteredByRule[rST]||0)+1;} this.filterNode(n,fR.reason,nT,eA); this.debugLog(`Filtered (${eA}): ${fR.reason}`,n);} }else{ if (!this.config.preview) { this.unfilterNode(n);} this.debugLog(`Not filtered: ${fR.reason}`,n);}}catch(err){this.log(`Filter node error: ${err.message}`);console.error(`Filter error:`,err,n); try{this.unfilterNode(n);}catch{}}}); if(sC){ if (!this.config.preview && !this.config.paused) { this.stats.totalProcessed+=pC; this.stats.totalFiltered+=fC; this.stats.totalWhitelisted+=wC; this.debouncedSaveStats(); } if(this.uiUpdateDebounceTimer)clearTimeout(this.uiUpdateDebounceTimer); this.uiUpdateDebounceTimer=setTimeout(()=>{if(this.config.uiVisible){this.updateUI();} this.uiUpdateDebounceTimer=null;},300);} this.lastFilterTime=performance.now(); const dur=this.lastFilterTime-sT; if(iTP.length>0){this.debugLog(`Filtering ${iTP.length} nodes took ${dur.toFixed(2)} ms.`);} }
 
         previewNode(n, reason, nT) { try { this.unfilterNode(n); const sR = reason.substring(0,200)+(reason.length>200?'...':''); const fAV=`${SCRIPT_PREFIX}: Preview (${sR})`; n.classList.add(`${SCRIPT_PREFIX}-preview`); n.setAttribute('data-racf-filter-reason', fAV); n.title = fAV; } catch(_){} }
 
         clearAllPreview() { try { document.querySelectorAll(`.${SCRIPT_PREFIX}-preview`).forEach(el => { el.classList.remove(`${SCRIPT_PREFIX}-preview`); if (el.hasAttribute('data-racf-filter-reason')) el.removeAttribute('data-racf-filter-reason'); if (el.title && el.title.startsWith(`${SCRIPT_PREFIX}:`)) el.removeAttribute('title'); }); } catch(_){} }
 
         clearAllFiltersInDOM() { try { const cls = ['hide','blur','border','collapse']; document.querySelectorAll(cls.map(a=>`.${SCRIPT_PREFIX}-${a}`).join(',')+`, .${SCRIPT_PREFIX}-text-replaced`).forEach(el=>{ this.unfilterNode(el); }); } catch(_){} }
-        editRuleExceptions(idx){ try{ if(!Array.isArray(this.config.rules) || !this.config.rules[idx]) return; const r=this.config.rules[idx]; const curSubs=(r.except&&Array.isArray(r.except.subreddits)?r.except.subreddits:[]).join(', '); const curUsers=(r.except&&Array.isArray(r.except.users)?r.except.users:[]).join(', ');
-                const ns=prompt('Subreddits en excepción (coma separada, sin r/):', curSubs);
-                if(ns===null) return; // cancel
-                const nu=prompt('Usuarios en excepción (coma separada, sin u/):', curUsers);
-                if(nu===null) return;
-                const toList=(s)=> (s||'').split(',').map(x=>x.trim().toLowerCase().replace(/^(r\/|u\/)/,'')).filter(Boolean);
-                const subs=toList(ns); const users=toList(nu);
-                r.except={ subreddits: subs, users: users };
-                this.saveConfigAndApplyFilters(); this.updateUI();
-        }catch(e){ this.log('Edit exceptions error: '+e.message); }}
-        getEffectiveAction(cA,nT){
-            if(nT!=='comments'){
-                if(cA==='collapse' || cA==='replace_text'){return 'hide';}
-            }
-            if(nT!=='posts'){
-                if(cA==='tap_reveal' || cA==='blur_click'){return 'blur';}
-            }
-            return cA;
-        }
-        shouldFilterNode(node){
-            let nT=null; if(node.matches(this.selectors.post))nT='posts'; else if(node.matches(this.selectors.comment))nT='comments'; else return{filter:false,reason:"Not target",whitelisted:false,ruleText:null,nodeType:null,matched:null};
-            let res={filter:false,reason:"No match",whitelisted:false,ruleText:null,nodeType:nT,matched:null};
-            if(!(this.config.filterTypes||[]).includes(nT)){res.reason=`Type ${nT} disabled`;return res;}
-            const sub=this.extractSubreddit(node,nT)?.toLowerCase()??null;
-            const aut=this.extractAuthor(node,nT)?.toLowerCase()??null;
-            if(sub&&(this.config.blacklist?.subreddits||[]).includes(sub)){return{...res,filter:true,reason:`BL Sub: r/${sub}`,ruleText:`bl-sub:${sub}`,matched:null};}
-            if(aut&&(this.config.blacklist?.users||[]).includes(aut)){return{...res,filter:true,reason:`BL User: u/${aut}`,ruleText:`bl-user:${aut}`,matched:null};}
-            if(sub&&(this.config.whitelist?.subreddits||[]).includes(sub)){return{...res,whitelisted:true,reason:`WL Sub: r/${sub}`};}
-            if(aut&&(this.config.whitelist?.users||[]).includes(aut)){return{...res,whitelisted:true,reason:`WL User: u/${aut}`};}
-            let cC={title:null,body:null,checked:false};
-            for(const rule of(this.config.rules||[])){
-                let match=false; const rST=`[${rule.type}${rule.isRegex?'(R)':''}${rule.normalize?'(N)':''}${rule.target?`-${rule.target}`:''}] ${rule.text}`; let rS="";
-                try{
-                    // Regla excepciones
-                    const exSubs=(rule.except?.subreddits||[]); const exUsers=(rule.except?.users||[]);
-                    if(sub && exSubs.includes(sub)) { continue; }
-                    if(aut && exUsers.includes(aut)) { continue; }
-                    switch(rule.type){
-                        case 'keyword':
-                            const targ=rule.target||'both';
-                            if(!cC.checked){const ex=this.extractContent(node,nT);cC.title=ex.title;cC.body=ex.body;cC.checked=true;}
-                            let cTT=[]; let tA=[];
-                            if((targ==='title'||targ==='both')&&cC.title){cTT.push(cC.title);tA.push('title');}
-                            if((targ==='body'||targ==='both')&&cC.body){cTT.push(cC.body);tA.push('body');}
-                            if(cTT.length===0){continue;}
-                            rS=` in ${tA.join('&')}`;
-                            let patt=rule.text; let tF;
-                            if(rule.isRegex){const rM=patt.match(/^\/(.+)\/([gimyus]*)$/); if(rM){try{const rgx=new RegExp(rM[1],rM[2]); tF=(t)=>rgx.test(t); rS+=` (Regex${rgx.flags.includes('i')?', Insens.':''})`; }catch(rE){this.log(`Rule err (bad regex) ${rST}: ${rE.message}`); continue;}} else { this.log(`Rule err (malformed regex) ${rST}`); continue; }
-                            } else { const uN=rule.normalize; const iCS=rule.caseSensitive; const cP=uN?this.normalizeText(patt):(iCS?patt:patt.toLowerCase()); tF=(t)=>{ if(!t)return false; const cCo=uN?this.normalizeText(t):(iCS?t:t.toLowerCase()); return cCo.includes(cP); }; rS+=`${uN?' (Norm.)':(iCS?' (Case Sens.)':' (Case Insens.)')}`; }
-                            match=cTT.some(t=>tF(t));
-                            break;
-                        case 'user': if(!aut) continue; match=aut===rule.text; rS=` (author: u/${aut})`; break;
-                        case 'subreddit': if(!sub||nT!=='posts') continue; match=sub===rule.text; rS=` (sub: r/${sub})`; break;
-                        default: break;
-                    }
-                    if(match){ const sRD=this.domPurify.sanitize(rule.text,{USE_PROFILES:{html:false}});
-                        return { ...res, filter:true, reason:`Rule: [${rule.type}] '${sRD}'${rS}`, ruleText:rST, matched:{ text:rule.text, type:rule.type, target:(rule.target||'both') } };
-                    }
-                }catch(e){ this.log(`Rule proc error ${rST}: ${e.message}`); }
-            }
-            res.reason="No matches"; return res;
-        }
+        getEffectiveAction(cA,nT){if(nT!=='comments'){if(cA==='collapse'||cA==='replace_text'){return'hide';}} return cA;}
+        shouldFilterNode(node){ let nT=null; if(node.matches(this.selectors.post))nT='posts'; else if(node.matches(this.selectors.comment))nT='comments'; else return{filter:false,reason:"Not target",whitelisted:false,ruleText:null,nodeType:null}; let res={filter:false,reason:"No match",whitelisted:false,ruleText:null,nodeType:nT}; if(!(this.config.filterTypes||[]).includes(nT)){res.reason=`Type ${nT} disabled`;return res;} const sub=this.extractSubreddit(node,nT)?.toLowerCase()??null; const aut=this.extractAuthor(node,nT)?.toLowerCase()??null; if(sub&&(this.config.blacklist?.subreddits||[]).includes(sub)){return{...res,filter:true,reason:`BL Sub: r/${sub}`,ruleText:`bl-sub:${sub}`};} if(aut&&(this.config.blacklist?.users||[]).includes(aut)){return{...res,filter:true,reason:`BL User: u/${aut}`,ruleText:`bl-user:${aut}`};} if(sub&&(this.config.whitelist?.subreddits||[]).includes(sub)){return{...res,whitelisted:true,reason:`WL Sub: r/${sub}`};} if(aut&&(this.config.whitelist?.users||[]).includes(aut)){return{...res,whitelisted:true,reason:`WL User: u/${aut}`};} let cC={title:null,body:null,checked:false}; for(const rule of(this.config.rules||[])){let match=false; const rST=`[${rule.type}${rule.isRegex?'(R)':''}${rule.normalize?'(N)':''}${rule.target?`-${rule.target}`:''}] ${rule.text}`; let rS=""; try{switch(rule.type){case'keyword':const targ=rule.target||'both'; if(!cC.checked){const ex=this.extractContent(node,nT);cC.title=ex.title;cC.body=ex.body;cC.checked=true;this.debugLog(`Extracted: T:${!!cC.title}, B:${!!cC.body}`,node);} let cTT=[]; let tA=[]; if((targ==='title'||targ==='both')&&cC.title){cTT.push(cC.title);tA.push('title');} if((targ==='body'||targ==='both')&&cC.body){cTT.push(cC.body);tA.push('body');} if(cTT.length===0){this.debugLog(`Skip rule ${rST}: no content for target '${targ}'`,node);continue;} rS=` in ${tA.join('&')}`; let patt=rule.text; let tF; if(rule.isRegex){const rM=patt.match(/^\/(.+)\/([gimyus]*)$/); if(rM){try{const rgx=new RegExp(rM[1],rM[2]);tF=(t)=>rgx.test(t);rS+=` (Regex${rgx.flags.includes('i')?', Insens.':''})`;}catch(rE){this.log(`Rule err (bad regex) ${rST}: ${rE.message}`);continue;}}else{this.log(`Rule err (malformed regex) ${rST}`);continue;}}else{const uN=rule.normalize; const iCS=rule.caseSensitive; const cP=uN?this.normalizeText(patt):(iCS?patt:patt.toLowerCase()); tF=(t)=>{if(!t)return false; const cCo=uN?this.normalizeText(t):(iCS?t:t.toLowerCase()); return cCo.includes(cP);}; rS+=`${uN?' (Norm.)':(iCS?' (Case Sens.)':' (Case Insens.)')}`;} match=cTT.some(t=>tF(t)); break; case'user':if(!aut)continue; match=aut===rule.text; rS=` (author: u/${aut})`; break; case'subreddit':if(!sub||nT!=='posts')continue; match=sub===rule.text; rS=` (sub: r/${sub})`; break;} if(match){const sRD=this.domPurify.sanitize(rule.text,{USE_PROFILES:{html:false}}); return{...res,filter:true,reason:`Rule: [${rule.type}] '${sRD}'${rS}`,ruleText:rST};}}catch(e){this.log(`Rule proc error ${rST}: ${e.message}`);console.error(`Rule error:`,e,rule,node);}} res.reason="No matches"; return res;}
         extractContent(n,nT){const r={title:null,body:null};try{if(nT==='posts'&&this.selectors.postTitleSelector){const tE=n.querySelector(this.selectors.postTitleSelector);if(tE){r.title=tE.textContent?.trim()||null;if(r.title)r.title=r.title.replace(/\s+/g,' ');}} let bS=null; if(nT==='posts'&&this.selectors.postBodySelector){bS=this.selectors.postBodySelector;}else if(nT==='comments'&&this.selectors.commentBodySelector){bS=this.selectors.commentBodySelector;} if(bS){const bE=n.querySelector(bS);if(bE){r.body=bE.textContent?.trim()||null;if(r.body)r.body=r.body.replace(/\s+/g,' ');}else if(this.isOldReddit&&nT==='posts'){const oPB=n.querySelector('.expando .usertext-body .md');if(oPB){r.body=oPB.textContent?.trim()||null;if(r.body)r.body=r.body.replace(/\s+/g,' ');}}}}catch(e){this.log(`Extract content err (t:${nT}): ${e.message}`);console.error("Extract Err:",n,e);} return r;}
         extractSubreddit(n,nT){if(nT!=='posts'||!this.selectors.postSubredditSelector)return null; try{const sE=n.querySelector(this.selectors.postSubredditSelector);if(sE){return sE.textContent?.trim().replace(/^r\//i,'')||null;} if(!this.isOldReddit){const lS=n.querySelector('a[data-testid="subreddit-name"]');if(lS)return lS.textContent?.trim().replace(/^r\//i,'')||null;} return null;}catch(e){this.log(`Extract sub err: ${e.message}`);return null;}}
         extractAuthor(n,nT){
@@ -1107,75 +1036,8 @@
                 return null;
             }
         }
-        filterNode(n,rs,nT,ac,matchInfo=null){
-            this.unfilterNode(n);
-            const eA=this.getEffectiveAction(ac,nT);
-            const sR=rs.substring(0,200)+(rs.length>200?'...':'');
-            const fAV=`${SCRIPT_PREFIX}: Filtered [${eA}] (${sR})`;
-            if(eA==='replace_text'&&nT==='comments'){
-                this.replaceCommentText(n,sR,matchInfo,eA);
-                n.setAttribute('data-racf-filter-reason',fAV); n.title=fAV;
-            } else if(eA==='tap_reveal' && nT==='posts'){
-                const aCl=`${SCRIPT_PREFIX}-tap_reveal`;
-                n.classList.add(aCl);
-                n.setAttribute('data-racf-filter-reason',fAV); n.title=fAV;
-                if(!n.dataset.racfToggle){
-                    n.addEventListener('click', ()=>{ n.classList.toggle(aCl); });
-                    n.dataset.racfToggle='1';
-                }
-            } else if(eA==='blur_click' && nT==='posts'){
-                const aCl=`${SCRIPT_PREFIX}-blur_click`;
-                n.classList.add(aCl);
-                n.setAttribute('data-racf-filter-reason',fAV); n.title=fAV;
-                if(!n.dataset.racfToggle){
-                    n.addEventListener('click', ()=>{ n.classList.toggle(aCl); });
-                    n.dataset.racfToggle='1';
-                }
-            } else if(FILTER_ACTIONS.includes(eA)&&eA!=='replace_text'){
-                const aCl=`${SCRIPT_PREFIX}-${eA}`;
-                n.classList.add(aCl);
-                n.setAttribute('data-racf-filter-reason',fAV); n.title=fAV;
-                this.debugLog(`Applied class '${aCl}' to:`,n);
-            } else {
-                this.log(`Invalid action '${ac}' in filterNode. Hiding.`);
-                n.classList.add(`${SCRIPT_PREFIX}-hide`);
-                const fbAV=`${SCRIPT_PREFIX}: Filtered [hide - fallback] (${sR})`;
-                n.setAttribute('data-racf-filter-reason',fbAV); n.title=fbAV;
-            }
-        }
-        renderTemplate(tpl, ctx){
-            try{
-                const map = {
-                    '{author}': (ctx.author||''),
-                    '{subreddit}': (ctx.subreddit||''),
-                    '{rule}': (ctx.rule||''),
-                    '{type}': (ctx.type||''),
-                    '{target}': (ctx.target||''),
-                    '{action}': (ctx.action||'')
-                };
-                let out = String(tpl);
-                Object.keys(map).forEach(k=>{ out = out.split(k).join(map[k]); });
-                return this.domPurify.sanitize(out, { USE_PROFILES: { html: false } });
-            }catch(_){ return tpl; }
-        }
-        replaceCommentText(cN,rs,matchInfo,action){
-            const bS=this.selectors.commentBodySelector; if(!bS){this.log("No commentBodySelector");return;}
-            const cB=cN.querySelector(bS); if(!cB){this.debugLog("Comment body not found:",bS,"on:",cN);return;}
-            if(!this.originalContentCache.has(cB)){
-                const cH=cB.innerHTML; if(!cH.includes(`[${SCRIPT_PREFIX}: Text Filtered`)){
-                    this.originalContentCache.set(cB,cH);
-                }
-            }
-            const author = this.extractAuthor(cN,'comments') || '';
-            const subreddit = this.extractSubreddit(cN,'comments') || '';
-            const templateRaw = (typeof this.config.replaceText==='string'&&this.config.replaceText.trim()!=='') ? this.config.replaceText.trim() : `[${SCRIPT_PREFIX}: Text Filtered (${rs})]`;
-            const tpl = this.renderTemplate(templateRaw, {
-                author, subreddit,
-                rule: matchInfo?.text || '', type: matchInfo?.type || '', target: matchInfo?.target || '', action: action||''
-            });
-            const pH=`<p>${tpl}</p>`;
-            if(cB.innerHTML!==pH){ cB.innerHTML=pH; cN.classList.add(`${SCRIPT_PREFIX}-text-replaced`); }
-        }
+        filterNode(n,rs,nT,ac){this.unfilterNode(n); const eA=this.getEffectiveAction(ac,nT); const sR=rs.substring(0,200)+(rs.length>200?'...':''); const fAV=`${SCRIPT_PREFIX}: Filtered [${eA}] (${sR})`; if(eA==='replace_text'&&nT==='comments'){this.replaceCommentText(n,sR);n.setAttribute('data-racf-filter-reason',fAV);n.title=fAV;}else if(FILTER_ACTIONS.includes(eA)&&eA!=='replace_text'){const aCl=`${SCRIPT_PREFIX}-${eA}`;n.classList.add(aCl);n.setAttribute('data-racf-filter-reason',fAV);n.title=fAV;this.debugLog(`Applied class '${aCl}' to:`,n);}else{this.log(`Invalid action '${ac}' in filterNode. Hiding.`);n.classList.add(`${SCRIPT_PREFIX}-hide`); const fbAV=`${SCRIPT_PREFIX}: Filtered [hide - fallback] (${sR})`;n.setAttribute('data-racf-filter-reason',fbAV);n.title=fbAV;}}
+        replaceCommentText(cN,rs){const bS=this.selectors.commentBodySelector; if(!bS){this.log("No commentBodySelector");return;} const cB=cN.querySelector(bS); if(!cB){this.debugLog("Comment body not found:",bS,"on:",cN);return;} if(!this.originalContentCache.has(cB)){const cH=cB.innerHTML; if(!cH.includes(`[${SCRIPT_PREFIX}: Text Filtered`)){this.originalContentCache.set(cB,cH);this.debugLog("Stored original:",cB);}else{this.debugLog("Skip cache store (placeholder found).",cB);}} const custom = (typeof this.config.replaceText==='string'&&this.config.replaceText.trim()!=='') ? this.domPurify.sanitize(this.config.replaceText.trim(), { USE_PROFILES: { html: false } }) : `[${SCRIPT_PREFIX}: Text Filtered (${rs})]`; const pH=`<p>${custom}</p>`; if(cB.innerHTML!==pH){cB.innerHTML=pH;cN.classList.add(`${SCRIPT_PREFIX}-text-replaced`);this.debugLog("Replaced text:",cN);}else{this.debugLog("Text already replaced.",cN);}}
         unfilterNode(n){let wM=false; FILTER_ACTIONS.forEach(ac=>{if(ac!=='replace_text'){const clN=`${SCRIPT_PREFIX}-${ac}`;if(n.classList.contains(clN)){n.classList.remove(clN);wM=true;}}}); const tRM=`${SCRIPT_PREFIX}-text-replaced`; if(n.classList.contains(tRM)){n.classList.remove(tRM);wM=true; const bS=this.selectors.commentBodySelector; const cB=bS?n.querySelector(bS):null; if(cB&&this.originalContentCache.has(cB)){const oH=this.originalContentCache.get(cB); if(cB.innerHTML.includes(`[${SCRIPT_PREFIX}: Text Filtered`)){cB.innerHTML=oH;this.debugLog("Restored text:",n);}else{this.debugLog("Skip restore (not placeholder).",cB);} this.originalContentCache.delete(cB);}else if(cB){this.debugLog("Cannot restore text (no cache?).",n); if(cB.innerHTML.includes(`[${SCRIPT_PREFIX}: Text Filtered`)){cB.innerHTML=`<!-- [${SCRIPT_PREFIX}] Restore failed -->`;}}} if(n.hasAttribute('data-racf-filter-reason')){n.removeAttribute('data-racf-filter-reason');wM=true;} if(n.title?.startsWith(SCRIPT_PREFIX+':')){n.removeAttribute('title');wM=true;} if(wM){this.debugLog("Unfiltered node:",n);}}
 
         // --- Other Methods (Scroll, Export, Import, Menu, Toggle, Save&Apply) ---
