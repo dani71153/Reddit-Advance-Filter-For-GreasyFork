@@ -31,3 +31,18 @@ Archivos tocados
 - V0.js:475–476 — se confirma coherencia de estilos de `racf-exc-btn` con los de mover.
 
 Nota: si prefieres cambiar el carácter del DOM a 'x' en lugar de transformarlo por CSS, puedo actualizar el `innerHTML` del render de reglas.
+
+feat(import/export): preview de importación con Merge/Replace, backups y exportes parciales
+
+- Import en seco (preview): al importar, no aplica cambios; muestra resumen (totales, únicas, duplicadas, nuevas) en pestaña Imported con botones.
+- Aplicar (Merge): deduplica y fusiona solo reglas nuevas; no cambia acción global ni replaceText.
+- Aplicar (Replace): reemplaza reglas actuales y adopta filterAction/replaceText del archivo (si presentes).
+- Backups automáticos: antes de Merge/Replace y al limpiar reglas, descarga backup con timestamp.
+- Export parcial: agrega selector de formato (Interno/External match.words) y botones “Export Rules” y “Export Lists”.
+- External rules export: comprime keywords no-regex en match.words y añade action/replaceWith.
+
+fix(import): elimina bloque suelto fuera del IIFE que impedía que los botones de preview (Merge/Replace/Descartar) funcionaran correctamente; los listeners ya viven dentro de addUIEventListeners en el Shadow DOM.
+fix(import): vuelve a cablear listeners de Merge/Replace/Descartar dentro de addUIEventListeners tras limpieza del bloque suelto.
+
+Archivos tocados
+- V0.js: UI (pestaña Imported y barra de exportación), listeners y nuevas utilidades: `exportRules`, `exportLists`, `downloadJSON`, `timestamp`, `normalizeImportedConfig`, `ruleKey`, `dedupeRules`, `applyPendingImportMerge`, `applyPendingImportReplace`, `discardPendingImport`, `backupCurrentConfig`.

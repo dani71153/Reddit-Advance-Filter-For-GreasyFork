@@ -83,6 +83,7 @@
             this.dragInitialTop = 0;
             this.domPurify = (typeof DOMPurify === 'undefined') ? { sanitize: (t) => t } : DOMPurify;
             this.originalContentCache = new WeakMap();
+            this.pendingImport = null;
         }
 
         log(message) {
@@ -374,7 +375,13 @@
                          </div>
                          <div class="racf-section racf-buttons">
                              <button id="racf-import-btn">Import (.json)</button>
-                             <button id="racf-export-btn">Export (.json)</button>
+                             <select id="racf-export-format" title="Formato de exportación" style="flex:0 0 auto; min-width: 180px;">
+                                 <option value="internal" selected>Formato Interno</option>
+                                 <option value="external">External (match.words)</option>
+                             </select>
+                             <button id="racf-export-btn">Export (Config)</button>
+                             <button id="racf-export-rules-btn">Export Rules</button>
+                             <button id="racf-export-lists-btn">Export Lists</button>
                              <input type="file" id="racf-import-file-input" accept=".json" style="display: none;">
                          </div>
                          <div class="racf-section racf-buttons">
@@ -384,6 +391,15 @@
                     <div id="racf-imported-content" class="racf-tab-content">
                         <h4>Imported Rules</h4>
                         <p><small>Vista de solo lectura de las reglas actuales importadas.</small></p>
+                        <div id="racf-import-preview" class="racf-section" style="display:none;">
+                            <h5>Import Preview</h5>
+                            <div id="racf-import-summary" style="font-size:13px; line-height:1.4;"></div>
+                            <div class="racf-buttons">
+                                <button id="racf-import-apply-merge">Aplicar (Merge)</button>
+                                <button id="racf-import-apply-replace">Aplicar (Replace)</button>
+                                <button id="racf-import-discard">Descartar</button>
+                            </div>
+                        </div>
                         <ul id="racf-imported-rule-list"><li>No imported rules yet.</li></ul>
                         <div class="racf-section racf-buttons">
                             <button id="racf-clear-imported-btn">Clear Imported Rules</button>
@@ -636,7 +652,24 @@
             }
 
             // Import/Export/Clear/Reset buttons
+            const exportFormatSelect = q('#racf-export-format');
             q('#racf-export-btn').addEventListener('click', () => this.exportConfig());
+            const exportRulesBtn = q('#racf-export-rules-btn');
+            if (exportRulesBtn) {
+                exportRulesBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const fmt = exportFormatSelect ? (exportFormatSelect.value || 'internal') : 'internal';
+                    this.exportRules(fmt);
+                });
+            }
+            const exportListsBtn = q('#racf-export-lists-btn');
+            if (exportListsBtn) {
+                exportListsBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const fmt = exportFormatSelect ? (exportFormatSelect.value || 'internal') : 'internal';
+                    this.exportLists(fmt);
+                });
+            }
             q('#racf-import-btn').addEventListener('click', () => { q('#racf-import-file-input')?.click(); });
             q('#racf-import-file-input')?.addEventListener('change', (e) => this.importConfig(e));
             q('#racf-clear-processed-btn').addEventListener('click', () => {
@@ -651,11 +684,25 @@
                 clearImportedBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (confirm('Delete all imported rules? This will clear current rules.')) {
+                        try { this.backupCurrentConfig('before-clear-rules'); } catch(_) {}
                         this.config.rules = [];
                         this.saveConfigAndApplyFilters();
                         this.updateUI();
                     }
                 });
+            }
+            // Import preview action buttons
+            const applyMergeBtn = q('#racf-import-apply-merge');
+            if (applyMergeBtn) {
+                applyMergeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.applyPendingImportMerge(); });
+            }
+            const applyReplaceBtn = q('#racf-import-apply-replace');
+            if (applyReplaceBtn) {
+                applyReplaceBtn.addEventListener('click', (e) => { e.stopPropagation(); this.applyPendingImportReplace(); });
+            }
+            const discardBtn = q('#racf-import-discard');
+            if (discardBtn) {
+                discardBtn.addEventListener('click', (e) => { e.stopPropagation(); this.discardPendingImport(); });
             }
             const togglePauseBtn = q('#racf-toggle-pause-btn');
             const togglePreviewBtn = q('#racf-toggle-preview-btn');
@@ -932,6 +979,29 @@
                         importedListEl.appendChild(li);
                     });
                 }
+                // Update import preview summary block
+                const prevWrap = q('#racf-import-preview');
+                const prevSum = q('#racf-import-summary');
+                if (prevWrap && prevSum) {
+                    if (this.pendingImport && this.pendingImport.normalized) {
+                        const pi = this.pendingImport;
+                        prevWrap.style.display = 'block';
+                        const action = this.pendingImport.normalized.filterAction || '(n/a)';
+                        const repl = (this.pendingImport.normalized.replaceText || '').toString();
+                        prevSum.innerHTML = `
+                            <div><strong>Total en archivo:</strong> ${pi.totalIncoming}</div>
+                            <div><strong>Únicas (normalizadas):</strong> ${pi.uniqueIncoming}</div>
+                            <div><strong>Duplicadas respecto a actuales:</strong> ${pi.duplicates}</div>
+                            <div><strong>Reglas nuevas si merge:</strong> ${pi.newRules}</div>
+                            <div><strong>Acción sugerida (archivo):</strong> ${this.domPurify.sanitize(action,{USE_PROFILES:{html:false}})}</div>
+                            <div><strong>replaceText (archivo):</strong> ${this.domPurify.sanitize(repl,{USE_PROFILES:{html:false}}) || '<i>(vacío)</i>'}</div>
+                            <small>Nota: Merge NO cambia acción global ni replaceText. Replace SÍ adopta los del archivo.</small>
+                        `;
+                    } else {
+                        prevWrap.style.display = 'none';
+                        prevSum.textContent = '';
+                    }
+                }
             }
             qa('.racf-filter-type').forEach(cb => { cb.checked = (this.config.filterTypes || []).includes(cb.value); });
             const actionSelect = q('#racf-filter-action');
@@ -1181,29 +1251,139 @@
         // --- Other Methods (Scroll, Export, Import, Menu, Toggle, Save&Apply) ---
         // (No changes needed in these)
         addScrollListener() { let sT=null; const hS=()=>{if(sT!==null){window.clearTimeout(sT);} if(performance.now()-this.lastFilterTime<DEBOUNCE_DELAY_MS/2){return;} sT=setTimeout(()=>{window.requestAnimationFrame(()=>{this.debugLog("Scroll end, filtering..."); this.applyFilters(document.body);}); sT=null;},DEBOUNCE_DELAY_MS);}; window.addEventListener('scroll',hS,{passive:true}); this.log("Scroll listener added."); }
-        exportConfig() { try{const cTE={...DEFAULT_CONFIG,...this.config,rules:this.config.rules||[],filterTypes:this.config.filterTypes||[],filterAction:FILTER_ACTIONS.includes(this.config.filterAction)?this.config.filterAction:DEFAULT_CONFIG.filterAction,whitelist:{...DEFAULT_CONFIG.whitelist,...(this.config.whitelist||{})},blacklist:{...DEFAULT_CONFIG.blacklist,...(this.config.blacklist||{})},uiPosition:{...DEFAULT_CONFIG.uiPosition,...(this.config.uiPosition||{})},uiVisible:typeof this.config.uiVisible==='boolean'?this.config.uiVisible:DEFAULT_CONFIG.uiVisible,activeTab:typeof this.config.activeTab==='string'?this.config.activeTab:DEFAULT_CONFIG.activeTab,}; const cS=JSON.stringify(cTE,null,2); const blob=new Blob([cS],{type:'application/json;charset=utf-8'}); const url=URL.createObjectURL(blob); const link=document.createElement('a'); link.setAttribute('href',url); const ts=new Date().toISOString().replace(/[:.]/g,'-'); link.setAttribute('download',`reddit-filter-config-${ts}.json`); link.style.display='none'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); this.log("Config exported.");}catch(e){this.log(`Export error: ${e.message}`);alert(`Export failed: ${e.message}`);console.error("Export Err:",e);} }
-        async importConfig(event) { const fI=event.target; const f=fI?.files?.[0]; if(!f){this.log("Import cancelled");return;} const nameOk=/\.json$/i.test(f.name||''); if(f.type && !/json/i.test(f.type) && !nameOk){ const proceed=confirm('El archivo no parece ser JSON. ¿Intentar de todos modos?'); if(!proceed){ if(fI)fI.value=null; return; } } const r=new FileReader(); r.onload=async(e)=>{const c=e.target?.result; if(!c){alert("Empty file");return;} try{let iC=JSON.parse(c); if(typeof iC!=='object'||iC===null){throw new Error("Bad JSON format");}
-            // Compatibilidad: mapear esquema alternativo { rules: [{name, match:{words:[]}, action, replaceWith}] }
-            if (Array.isArray(iC.rules) && iC.rules.length && (!('type' in iC.rules[0]) || !('text' in iC.rules[0])) ) {
-                const first = iC.rules[0] || {};
-                const mapped = [];
-                iC.rules.forEach(r0 => {
-                    const words = Array.isArray(r0?.match?.words) ? r0.match.words : [];
-                    words.forEach(w => {
-                        const t = String(w).trim();
-                        if (t) mapped.push({ type:'keyword', text:t, isRegex:false, caseSensitive:false, normalize:true, target:'both' });
-                    });
-                });
-                iC = { ...iC, rules: mapped };
-                if (first && typeof first.action === 'string' && FILTER_ACTIONS.includes(first.action)) {
-                    iC.filterAction = first.action;
+        exportConfig() { try{const cTE={...DEFAULT_CONFIG,...this.config,rules:this.config.rules||[],filterTypes:this.config.filterTypes||[],filterAction:FILTER_ACTIONS.includes(this.config.filterAction)?this.config.filterAction:DEFAULT_CONFIG.filterAction,whitelist:{...DEFAULT_CONFIG.whitelist,...(this.config.whitelist||{})},blacklist:{...DEFAULT_CONFIG.blacklist,...(this.config.blacklist||{})},uiPosition:{...DEFAULT_CONFIG.uiPosition,...(this.config.uiPosition||{})},uiVisible:typeof this.config.uiVisible==='boolean'?this.config.uiVisible:DEFAULT_CONFIG.uiVisible,activeTab:typeof this.config.activeTab==='string'?this.config.activeTab:DEFAULT_CONFIG.activeTab,}; const cS=JSON.stringify(cTE,null,2); this.downloadJSON(`reddit-filter-config-${this.timestamp()}.json`, cS); this.log("Config exported.");}catch(e){this.log(`Export error: ${e.message}`);alert(`Export failed: ${e.message}`);console.error("Export Err:",e);} }
+
+        exportRules(format='internal') {
+            try {
+                const rules = Array.isArray(this.config.rules) ? this.config.rules : [];
+                if (format === 'external') {
+                    const words = rules.filter(r=>r && r.type==='keyword' && !r.isRegex && typeof r.text==='string' && r.text.trim()!=='')
+                                        .map(r=>r.text.trim());
+                    const uniq = Array.from(new Set(words));
+                    const out = { rules: [ { match: { words: uniq }, action: this.config.filterAction || 'hide', replaceWith: this.config.replaceText || '' } ] };
+                    const s = JSON.stringify(out, null, 2);
+                    this.downloadJSON(`reddit-filter-rules-external-${this.timestamp()}.json`, s);
+                } else {
+                    const out = { rules };
+                    const s = JSON.stringify(out, null, 2);
+                    this.downloadJSON(`reddit-filter-rules-${this.timestamp()}.json`, s);
                 }
-                if (typeof first?.replaceWith === 'string' && first.replaceWith.trim() !== '') {
-                    iC.replaceText = first.replaceWith.trim();
-                }
+                this.log(`Rules exported (${format}).`);
+            } catch (e) {
+                this.log(`Export rules error: ${e.message}`);
+                alert(`Export rules failed: ${e.message}`);
             }
-            const nC={...DEFAULT_CONFIG,...iC,rules:Array.isArray(iC.rules)?iC.rules:[],filterTypes:Array.isArray(iC.filterTypes)?iC.filterTypes.filter(t=>['posts','comments','messages'].includes(t)):DEFAULT_CONFIG.filterTypes,filterAction:FILTER_ACTIONS.includes(iC.filterAction)?iC.filterAction:DEFAULT_CONFIG.filterAction,whitelist:{subreddits:Array.isArray(iC.whitelist?.subreddits)?iC.whitelist.subreddits.map(s=>String(s).toLowerCase()):[],users:Array.isArray(iC.whitelist?.users)?iC.whitelist.users.map(u=>String(u).toLowerCase()):[]},blacklist:{subreddits:Array.isArray(iC.blacklist?.subreddits)?iC.blacklist.subreddits.map(s=>String(s).toLowerCase()):[],users:Array.isArray(iC.blacklist?.users)?iC.blacklist.users.map(u=>String(u).toLowerCase()):[]},uiPosition:{...DEFAULT_CONFIG.uiPosition,...(typeof iC.uiPosition==='object'?iC.uiPosition:{})},uiVisible:typeof iC.uiVisible==='boolean'?iC.uiVisible:DEFAULT_CONFIG.uiVisible,activeTab:typeof iC.activeTab==='string'?iC.activeTab:DEFAULT_CONFIG.activeTab, replaceText: typeof iC.replaceText==='string'?iC.replaceText:DEFAULT_CONFIG.replaceText };
-            nC.rules=nC.rules.filter(rl=>rl&&typeof rl==='object'&&RULE_TYPES.includes(rl.type)&&typeof rl.text==='string'&&rl.text.trim()!==''&&typeof rl.isRegex==='boolean'&&typeof rl.caseSensitive==='boolean'&&typeof rl.normalize==='boolean'&&(typeof rl.target==='string'&&['title','body','both'].includes(rl.target))).map(rl=>{if(rl.type==='user'||rl.type==='subreddit'){rl.text=rl.text.toLowerCase().replace(/^(u\/|r\/)/i,'');rl.caseSensitive=false;rl.normalize=false;rl.isRegex=false;} if(rl.normalize&&rl.type==='keyword'&&!rl.isRegex){rl.caseSensitive=false;} return rl;}); this.config=nC; if(this.uiContainer&&this.config.uiPosition){const p=this.config.uiPosition;this.uiContainer.style.top=p.top||DEFAULT_CONFIG.uiPosition.top; if(p.left!==null&&p.left!==undefined){this.uiContainer.style.left=p.left;this.uiContainer.style.right='auto';}else{this.uiContainer.style.left='auto';this.uiContainer.style.right=p.right||DEFAULT_CONFIG.uiPosition.right;} if(p.width&&p.width!=='auto')this.uiContainer.style.width=p.width; if(p.height&&p.height!=='auto')this.uiContainer.style.height=p.height; this.uiContainer.style.display=this.config.uiVisible?'block':'none';} this.log(`Config imported. ${nC.rules.length} rules.`); this.config.activeTab='imported'; await this.saveConfig(); this.updateUI(); this.processedNodes=new WeakSet(); this.originalContentCache=new WeakMap(); this.applyFilters(document.body); alert('Config imported!');}catch(err){alert(`Import error: ${err.message}`);this.log(`Import error: ${err.message}`);console.error("Import Err:",err);}finally{if(fI)fI.value=null;}}; r.onerror=(e)=>{alert(`File read error: ${e.target?.error||'?'}`);this.log(`File read error: ${e.target?.error}`);if(fI)fI.value=null;}; r.readAsText(f); }
+        }
+
+        exportLists(format='internal') {
+            try {
+                const out = { whitelist: this.config.whitelist || { subreddits: [], users: [] }, blacklist: this.config.blacklist || { subreddits: [], users: [] } };
+                const s = JSON.stringify(out, null, 2);
+                const fname = `reddit-filter-lists-${this.timestamp()}.json`;
+                this.downloadJSON(fname, s);
+                this.log(`Lists exported (${format}).`);
+            } catch (e) {
+                this.log(`Export lists error: ${e.message}`);
+                alert(`Export lists failed: ${e.message}`);
+            }
+        }
+
+        downloadJSON(filename, contentString) {
+            const blob=new Blob([contentString],{type:'application/json;charset=utf-8'});
+            const url=URL.createObjectURL(blob);
+            const link=document.createElement('a');
+            link.setAttribute('href',url);
+            link.setAttribute('download',filename);
+            link.style.display='none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        timestamp(){ return new Date().toISOString().replace(/[:.]/g,'-'); }
+        async importConfig(event) { const fI=event.target; const f=fI?.files?.[0]; if(!f){this.log("Import cancelled");return;} const nameOk=/\.json$/i.test(f.name||''); if(f.type && !/json/i.test(f.type) && !nameOk){ const proceed=confirm('El archivo no parece ser JSON. ¿Intentar de todos modos?'); if(!proceed){ if(fI)fI.value=null; return; } } const r=new FileReader(); r.onload=async(e)=>{const c=e.target?.result; if(!c){alert("Empty file");return;} try{let raw=JSON.parse(c); if(typeof raw!=='object'||raw===null){throw new Error("Bad JSON format");}
+            const nC = this.normalizeImportedConfig(raw);
+            const incoming = Array.isArray(nC.rules)? nC.rules : [];
+            const existing = Array.isArray(this.config.rules)? this.config.rules : [];
+            const existKeys = new Set(existing.map(r=>this.ruleKey(r)));
+            const incomingUnique = this.dedupeRules(incoming);
+            const newOnes = incomingUnique.filter(r=>!existKeys.has(this.ruleKey(r)));
+            this.pendingImport = {
+                normalized: nC,
+                totalIncoming: incoming.length,
+                uniqueIncoming: incomingUnique.length,
+                duplicates: incomingUnique.length - newOnes.length,
+                newRules: newOnes.length
+            };
+            this.config.activeTab = 'imported';
+            this.updateUI();
+            this.log(`Import preview ready: ${incoming.length} incoming, ${newOnes.length} new.`);
+        }catch(err){alert(`Import error: ${err.message}`);this.log(`Import error: ${err.message}`);console.error("Import Err:",err);}finally{if(fI)fI.value=null;}}; r.onerror=(e)=>{alert(`File read error: ${e.target?.error||'?'}`);this.log(`File read error: ${e.target?.error}`);if(fI)fI.value=null;}; r.readAsText(f); }
+
+        normalizeImportedConfig(iC){
+            // Compatibilidad: mapear esquema alternativo { rules: [{name, match:{words:[]}, action, replaceWith}] }
+            try{
+                if (Array.isArray(iC?.rules) && iC.rules.length && (!('type' in (iC.rules[0]||{})) || !('text' in (iC.rules[0]||{}))) ) {
+                    const first = iC.rules[0] || {};
+                    const mapped = [];
+                    iC.rules.forEach(r0 => {
+                        const words = Array.isArray(r0?.match?.words) ? r0.match.words : [];
+                        words.forEach(w => {
+                            const t = String(w).trim();
+                            if (t) mapped.push({ type:'keyword', text:t, isRegex:false, caseSensitive:false, normalize:true, target:'both' });
+                        });
+                    });
+                    iC = { ...iC, rules: mapped };
+                    if (first && typeof first.action === 'string' && FILTER_ACTIONS.includes(first.action)) { iC.filterAction = first.action; }
+                    if (typeof first?.replaceWith === 'string' && first.replaceWith.trim() !== '') { iC.replaceText = first.replaceWith.trim(); }
+                }
+                const nC={...DEFAULT_CONFIG,...iC,rules:Array.isArray(iC.rules)?iC.rules:[],filterTypes:Array.isArray(iC.filterTypes)?iC.filterTypes.filter(t=>['posts','comments','messages'].includes(t)):DEFAULT_CONFIG.filterTypes,filterAction:FILTER_ACTIONS.includes(iC.filterAction)?iC.filterAction:DEFAULT_CONFIG.filterAction,whitelist:{subreddits:Array.isArray(iC.whitelist?.subreddits)?iC.whitelist.subreddits.map(s=>String(s).toLowerCase()):[],users:Array.isArray(iC.whitelist?.users)?iC.whitelist.users.map(u=>String(u).toLowerCase()):[]},blacklist:{subreddits:Array.isArray(iC.blacklist?.subreddits)?iC.blacklist.subreddits.map(s=>String(s).toLowerCase()):[],users:Array.isArray(iC.blacklist?.users)?iC.blacklist.users.map(u=>String(u).toLowerCase()):[]},uiPosition:{...DEFAULT_CONFIG.uiPosition,...(typeof iC.uiPosition==='object'?iC.uiPosition:{})},uiVisible:typeof iC.uiVisible==='boolean'?iC.uiVisible:DEFAULT_CONFIG.uiVisible,activeTab:typeof iC.activeTab==='string'?iC.activeTab:DEFAULT_CONFIG.activeTab, replaceText: typeof iC.replaceText==='string'?iC.replaceText:DEFAULT_CONFIG.replaceText };
+                nC.rules=nC.rules.filter(rl=>rl&&typeof rl==='object'&&RULE_TYPES.includes(rl.type)&&typeof rl.text==='string'&&rl.text.trim()!==''&&typeof rl.isRegex==='boolean'&&typeof rl.caseSensitive==='boolean'&&typeof rl.normalize==='boolean'&&(typeof rl.target==='string'&&['title','body','both'].includes(rl.target))).map(rl=>{if(rl.type==='user'||rl.type==='subreddit'){rl.text=rl.text.toLowerCase().replace(/^(u\/|r\/)/i,'');rl.caseSensitive=false;rl.normalize=false;rl.isRegex=false;} if(rl.normalize&&rl.type==='keyword'&&!rl.isRegex){rl.caseSensitive=false;} return rl;});
+                return nC;
+            }catch(e){ this.log(`Normalize import error: ${e.message}`); throw e; }
+        }
+
+        ruleKey(r){ try { return `${r.type}|${r.isRegex?'R':'K'}|${r.caseSensitive?'S':'i'}|${r.normalize?'N':'n'}|${r.target||'both'}|${String(r.text).trim()}`; } catch(_){ return Math.random().toString(36).slice(2); } }
+        dedupeRules(arr){ const seen=new Set(); const out=[]; (arr||[]).forEach(r=>{ const k=this.ruleKey(r); if(!seen.has(k)){ seen.add(k); out.push(r);} }); return out; }
+
+        applyPendingImportMerge(){ try{
+                if(!this.pendingImport || !this.pendingImport.normalized) { alert('No pending import.'); return; }
+                this.backupCurrentConfig('before-merge');
+                const incoming = this.dedupeRules(this.pendingImport.normalized.rules || []);
+                const merged = this.dedupeRules([...(this.config.rules||[]), ...incoming]);
+                this.config.rules = merged;
+                // Keep global settings on merge (no override)
+                this.saveConfigAndApplyFilters();
+                this.pendingImport = null;
+                this.updateUI();
+                alert('Import merged successfully.');
+            }catch(e){ alert(`Merge failed: ${e.message}`); this.log(`Merge failed: ${e.message}`);} }
+
+        applyPendingImportReplace(){ try{
+                if(!this.pendingImport || !this.pendingImport.normalized) { alert('No pending import.'); return; }
+                this.backupCurrentConfig('before-replace');
+                const nC = this.pendingImport.normalized;
+                this.config.rules = this.dedupeRules(nC.rules || []);
+                // On replace, adopt action and replaceText from import when present
+                if (FILTER_ACTIONS.includes(nC.filterAction)) this.config.filterAction = nC.filterAction;
+                if (typeof nC.replaceText === 'string') this.config.replaceText = nC.replaceText;
+                this.saveConfigAndApplyFilters();
+                this.pendingImport = null;
+                this.updateUI();
+                alert('Import replaced current rules.');
+            }catch(e){ alert(`Replace failed: ${e.message}`); this.log(`Replace failed: ${e.message}`);} }
+
+        discardPendingImport(){ this.pendingImport=null; this.updateUI(); this.log('Pending import discarded.'); }
+
+        backupCurrentConfig(suffix='backup'){
+            try{
+                const cTE={...DEFAULT_CONFIG,...this.config,rules:this.config.rules||[],filterTypes:this.config.filterTypes||[],filterAction:FILTER_ACTIONS.includes(this.config.filterAction)?this.config.filterAction:DEFAULT_CONFIG.filterAction,whitelist:{...DEFAULT_CONFIG.whitelist,...(this.config.whitelist||{})},blacklist:{...DEFAULT_CONFIG.blacklist,...(this.config.blacklist||{})},uiPosition:{...DEFAULT_CONFIG.uiPosition,...(this.config.uiPosition||{})},uiVisible:typeof this.config.uiVisible==='boolean'?this.config.uiVisible:DEFAULT_CONFIG.uiVisible,activeTab:typeof this.config.activeTab==='string'?this.config.activeTab:DEFAULT_CONFIG.activeTab,};
+                const cS=JSON.stringify(cTE,null,2);
+                this.downloadJSON(`reddit-filter-backup-${suffix}-${this.timestamp()}.json`, cS);
+                this.log('Backup saved.');
+            }catch(e){ this.log(`Backup failed: ${e.message}`); }
+        }
         registerMenuCommands() { GM_registerMenuCommand('Toggle Filter Panel',()=>this.toggleUIVisibility()); GM_registerMenuCommand('Re-apply All Filters',()=>{this.log(`Manual re-filter.`);this.processedNodes=new WeakSet();this.originalContentCache=new WeakMap();this.applyFilters(document.body);}); GM_registerMenuCommand('Reset Filter Statistics',()=>this.resetStats()); }
         toggleUIVisibility(forceState=null) { const sBV=forceState!==null?forceState:!this.config.uiVisible; if(sBV!==this.config.uiVisible){this.config.uiVisible=sBV; if(this.uiContainer){this.uiContainer.style.display=this.config.uiVisible?'block':'none';} this.saveConfig(); if(this.config.uiVisible){this.updateUI();} const oB=document.getElementById(`${SCRIPT_PREFIX}-options-btn`); if(oB){oB.textContent=this.config.uiVisible?'Ocultar RCF':'Mostrar RCF';oB.title=this.config.uiVisible?'Ocultar Panel':'Mostrar Panel';}}}
         async saveConfigAndApplyFilters() { await this.saveConfig(); if(this.filterApplyDebounceTimer)clearTimeout(this.filterApplyDebounceTimer); this.filterApplyDebounceTimer=setTimeout(()=>{this.log(`Config change, re-filtering...`);this.processedNodes=new WeakSet();this.originalContentCache=new WeakMap();this.applyFilters(document.body);this.filterApplyDebounceTimer=null;},150); }
