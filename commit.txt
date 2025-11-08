@@ -1,26 +1,22 @@
-He agregado mejoras de UX centradas en control rápido y depuración:
+feat(ui): pestaña Imported, importación robusta, pausa/vista previa, búsqueda/orden/tester de reglas; fixes
 
-Controles globales
-
-Botón Pause Filters: detiene la aplicación de reglas y limpia los efectos visuales activos.
-Botón Preview Mode: no oculta nada; resalta coincidencias con borde naranja “Preview”.
-Ambos botones muestran estado activo y tienen estilos consistentes.
-Atajos de teclado
-
-Ctrl+Shift+P: alterna Pausa.
-Ctrl+Shift+V: alterna Vista Previa.
-Ctrl+Shift+O: mostrar/ocultar panel.
-Ctrl+Shift+R: re-aplicar filtros manualmente.
-Lógica de aplicación
-
-Pausa: no procesa ni actualiza estadísticas; limpia filtros y previews del DOM.
-Vista previa: resalta coincidencias (no modifica contenido ni incrementa estadísticas).
-Al salir de Preview, restaura y re-aplica filtros si no está en pausa.
-Limpieza y consistencia
-
-clearAllFiltersInDOM: elimina clases y restauraciones (incluye replace_text) usando la cache local.
-clearAllPreview: elimina resaltados de preview.
-updateUI sincroniza el estado visual de botones (texto y clase activa).
-
-
-Tambien se arreglo importacion y exportacion de reglas. Asi como su borrado global.
+Añade pestaña “Imported” (solo lectura) con botón “Clear Imported Rules”.
+Importación mejorada:
+Acepta .json sin MIME; confirma si el tipo es desconocido.
+Mapea esquema externo {match.words, action, replaceWith} → reglas internas.
+Soporta replaceWith como replaceText global; cambia a pestaña Imported tras importar.
+Renderiza lista de reglas importadas; evita drag en sus elementos.
+Controles de ejecución:
+“Pause Filters” y “Preview Mode”. En vista previa solo resalta, no oculta ni altera texto.
+No actualiza estadísticas en pausa/preview; limpia efectos al alternar.
+Atajos: Ctrl+Shift+P (pausa), Ctrl+Shift+V (preview), Ctrl+Shift+O (panel), Ctrl+Shift+R (reaplicar).
+Gestión de reglas:
+“Search Rules” (filtro en vivo) y “Sort Rules” (Position/Type/Text/Target).
+Botones ↑/↓ activos cuando Sort=Position.
+“Rule Tester”: prueba reglas keyword contra texto pegado (Both/Title/Body) sin efectos colaterales.
+Correcciones:
+Elimina bloque duplicado fuera del IIFE que rompía listeners.
+Corrige HTML de la lista (comillas/template) para que funcionen los botones.
+Conecta listeners de búsqueda/orden/tester dentro de addUIEventListeners.
+Estilos para nuevos botones y listas.
+Config: añade paused, preview, replaceText y uiState (ruleSearch/ruleSort).

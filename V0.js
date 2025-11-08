@@ -42,6 +42,8 @@
         preview: false,
         // Optional custom replacement text used when action is replace_text
         replaceText: null,
+        // Persisted UI state (search/sort)
+        uiState: { ruleSearch: '', ruleSort: 'position' },
         uiPosition: {
             top: '100px',
             left: null,
@@ -294,6 +296,24 @@
                              <button id="racf-toggle-pause-btn">Pause Filters</button>
                              <button id="racf-toggle-preview-btn">Preview Mode</button>
                          </div>
+                         <div class="racf-section">
+                             <div class="racf-input-group">
+                                 <label for="racf-rule-search">Search Rules</label>
+                                 <input type="text" id="racf-rule-search" placeholder="Search by text/type/target">
+                             </div>
+                             <div class="racf-input-group">
+                                 <label for="racf-rule-sort">Sort Rules</label>
+                                 <select id="racf-rule-sort">
+                                     <option value="position">Position (default)</option>
+                                     <option value="type_asc">Type A→Z</option>
+                                     <option value="type_desc">Type Z→A</option>
+                                     <option value="text_asc">Text A→Z</option>
+                                     <option value="text_desc">Text Z→A</option>
+                                     <option value="target_asc">Target A→Z</option>
+                                     <option value="target_desc">Target Z→A</option>
+                                 </select>
+                             </div>
+                         </div>
                          <div class="racf-add-rule-section">
                              <div class="racf-input-group">
                                  <label for="racf-rule-input">Rule Text:</label>
@@ -334,6 +354,20 @@
                          <div class="racf-section">
                              <label>Active Rules (<span id="racf-rule-count">0</span>):</label>
                              <ul id="racf-rule-list"></ul>
+                         </div>
+                         <div class="racf-section">
+                             <h5>Rule Tester</h5>
+                             <textarea id="racf-tester-input" rows="3" placeholder="Pega un título o cuerpo para probar coincidencias (solo 'keyword')..."></textarea>
+                             <div class="racf-buttons">
+                                 <select id="racf-tester-target">
+                                     <option value="both" selected>Both (Title & Body)</option>
+                                     <option value="title">Title</option>
+                                     <option value="body">Body</option>
+                                 </select>
+                                 <button id="racf-run-test-btn">Run Test</button>
+                                 <button id="racf-clear-test-btn">Clear</button>
+                             </div>
+                             <ul id="racf-test-results"><li>No test run.</li></ul>
                          </div>
                          <div class="racf-section">
                              <small>Global Whitelists/Blacklists are managed via JSON Import/Export.</small>
@@ -436,12 +470,17 @@
                 #racf-toggle-preview-btn.toggle-active { background-color: #117a8b; color: #fff; border-color: #0f6674; }
                 #racf-rule-list button.racf-remove-btn { background: #dc3545; border: 1px solid #dc3545; color: #fff; padding: 3px 7px; font-size: 11px; margin-left: 5px; flex-shrink: 0; line-height: 1; }
                 #racf-rule-list button.racf-remove-btn:hover { background-color: #c82333; border-color: #bd2130; }
+                #racf-rule-list button.racf-move-btn { background: #6c757d; border: 1px solid #6c757d; color: #fff; padding: 3px 7px; font-size: 11px; margin-left: 5px; flex-shrink: 0; line-height: 1; }
+                #racf-rule-list button.racf-move-btn:hover { background-color: #5a6268; border-color: #545b62; }
                 #racf-rule-list, #racf-stats-rule-list, #racf-imported-rule-list { list-style: none; padding: 0; max-height: 180px; overflow-y: auto; border: 1px solid #eee; margin-top: 5px; background: #fff; }
                 #racf-rule-list li, #racf-stats-rule-list li, #racf-imported-rule-list li { padding: 6px 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
                 #racf-rule-list li:last-child, #racf-stats-rule-list li:last-child, #racf-imported-rule-list li:last-child { border-bottom: none; }
                 #racf-rule-list .racf-rule-details { flex-grow: 1; margin-right: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
                 #racf-rule-list .racf-rule-type-badge { font-size: .8em; padding: 1px 4px; border-radius: 3px; background-color: #6c757d; color: #fff; flex-shrink: 0; text-transform: uppercase; }
                 #racf-rule-list .racf-rule-text { word-break: break-all; font-family: monospace; background: #e9ecef; padding: 1px 3px; border-radius: 2px; color: #212529;}
+                #racf-rule-search { margin-top: 4px; }
+                #racf-tester-input { width: 100%; box-sizing: border-box; margin: 6px 0; }
+                #racf-test-results { list-style: none; padding: 0; max-height: 140px; overflow-y: auto; border: 1px solid #eee; margin-top: 5px; background: #fff; }
                 #racf-stats-rule-list .racf-rule-text { flex-grow: 1; margin-right: 10px; word-break: break-all; font-family: monospace; background: #e9ecef; padding: 1px 3px; border-radius: 2px; color: #212529;}
                 #racf-stats-rule-list .racf-rule-count { font-weight: 700; margin-left: 10px; flex-shrink: 0; background-color: #007bff; color: #fff; padding: 2px 5px; border-radius: 10px; font-size: 0.9em;}
                 .racf-buttons { margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
@@ -541,11 +580,29 @@
                  // Prevent drag start when clicking inside the rule list (buttons handled below)
                  e.stopPropagation();
                 const removeButton = e.target.closest('button.racf-remove-btn');
+                const moveUpBtn = e.target.closest('button.racf-move-up');
+                const moveDownBtn = e.target.closest('button.racf-move-down');
                 if (removeButton) {
                      // stopPropagation() already prevents drag, button click proceeds
                     const ruleIndex = parseInt(removeButton.dataset.ruleIndex, 10);
                     if (!isNaN(ruleIndex)) { this.removeRuleByIndex(ruleIndex); }
                     else { this.log(`Could not remove rule: Invalid index.`); }
+                } else if (moveUpBtn || moveDownBtn) {
+                    const ruleIndex = parseInt((moveUpBtn||moveDownBtn).dataset.ruleIndex, 10);
+                    if (!isNaN(ruleIndex)) {
+                        if (!this.config || !Array.isArray(this.config.rules)) return;
+                        if (this.config.uiState?.ruleSort && this.config.uiState.ruleSort !== 'position') {
+                            alert('Move is disabled while a sort order is active. Set sort to Position.');
+                            return;
+                        }
+                        const newIndex = moveUpBtn ? Math.max(0, ruleIndex - 1) : Math.min(this.config.rules.length - 1, ruleIndex + 1);
+                        if (newIndex !== ruleIndex) {
+                            const [item] = this.config.rules.splice(ruleIndex, 1);
+                            this.config.rules.splice(newIndex, 0, item);
+                            this.saveConfig();
+                            this.updateUI();
+                        }
+                    }
                 }
             });
 
@@ -622,6 +679,45 @@
                  e.stopPropagation(); // Prevent drag start when clicking close button
                  this.toggleUIVisibility(false)
             });
+
+            // Search/sort controls
+            const searchInput = q('#racf-rule-search');
+            const sortSelect = q('#racf-rule-sort');
+            if (searchInput) {
+                searchInput.value = this.config.uiState?.ruleSearch || '';
+                searchInput.addEventListener('input', () => {
+                    this.config.uiState.ruleSearch = searchInput.value || '';
+                    this.saveConfig();
+                    this.updateUI();
+                });
+            }
+            if (sortSelect) {
+                sortSelect.value = this.config.uiState?.ruleSort || 'position';
+                sortSelect.addEventListener('change', () => {
+                    this.config.uiState.ruleSort = sortSelect.value || 'position';
+                    this.saveConfig();
+                    this.updateUI();
+                });
+            }
+
+            // Rule Tester
+            const runTestBtn = q('#racf-run-test-btn');
+            const clearTestBtn = q('#racf-clear-test-btn');
+            if (runTestBtn) {
+                runTestBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.runRuleTester();
+                });
+            }
+            if (clearTestBtn) {
+                clearTestBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const i = q('#racf-tester-input');
+                    if (i) i.value = '';
+                    const r = q('#racf-test-results');
+                    if (r) r.innerHTML = '<li>No test run.</li>';
+                });
+            }
 
              // Resize end listener (mouseup on the container)
              if (this.uiContainer) {
@@ -771,13 +867,34 @@
             const ruleListEl = q('#racf-rule-list');
             if (ruleListEl) {
                 ruleListEl.innerHTML = '';
-                (this.config.rules || []).forEach((rule, index) => {
+                const rulesWithIndex = (this.config.rules || []).map((r, i) => ({...r, __index: i}));
+                // Filter by search
+                const query = (this.config.uiState?.ruleSearch || '').trim().toLowerCase();
+                const filtered = query ? rulesWithIndex.filter(r => {
+                    const t = `${r.type||''} ${r.text||''} ${r.target||''}`.toLowerCase();
+                    return t.includes(query);
+                }) : rulesWithIndex;
+                // Sort
+                const sortKey = this.config.uiState?.ruleSort || 'position';
+                const sorted = [...filtered];
+                const cmp = (a,b, key) => (a[key]||'').localeCompare(b[key]||'', undefined, { sensitivity: 'base' });
+                switch (sortKey) {
+                    case 'type_asc': sorted.sort((a,b)=>cmp(a,b,'type')); break;
+                    case 'type_desc': sorted.sort((a,b)=>cmp(b,a,'type')); break;
+                    case 'text_asc': sorted.sort((a,b)=>cmp(a,b,'text')); break;
+                    case 'text_desc': sorted.sort((a,b)=>cmp(b,a,'text')); break;
+                    case 'target_asc': sorted.sort((a,b)=>cmp(a,b,'target')); break;
+                    case 'target_desc': sorted.sort((a,b)=>cmp(b,a,'target')); break;
+                    case 'position': default: /* keep original order */ break;
+                }
+                sorted.forEach((rule) => {
                     const li = document.createElement('li');
                     const safeText = this.domPurify.sanitize(rule.text || '', { USE_PROFILES: { html: false } });
                     const typeTitle = `Type: ${rule.type}`; const regexTitle = rule.isRegex ? ' (Regex)' : '';
                     const caseTitle = (rule.type === 'keyword' && !rule.isRegex) ? (rule.caseSensitive ? ' (Case Sensitive)' : ' (Case Insensitive)') : '';
                     const targetTitle = `Applies to: ${rule.target || 'both'}`; const normTitle = rule.normalize ? ' (Normalized)' : '';
-                    li.innerHTML = `<div class="racf-rule-details"><span class="racf-rule-type-badge" title="${typeTitle}">${rule.type}</span><span class="racf-rule-text">${safeText}</span>${rule.isRegex ? `<small title="Regular Expression${caseTitle}">(R${rule.caseSensitive ? '' : 'i'})</small>` : ''}${rule.type === 'keyword' && !rule.isRegex && !rule.caseSensitive && !rule.normalize ? '<small title="Case Insensitive">(i)</small>' : ''}<small title="${targetTitle}">[${rule.target || 'both'}]</small>${rule.normalize ? `<small title="${normTitle}">(Norm)</small>` : ''}</div><button class="racf-remove-btn" data-rule-index="${index}" title="Remove Rule">X</button>`;
+                    const positionControls = (this.config.uiState?.ruleSort === 'position') ? `<button class="racf-move-btn racf-move-up" data-rule-index="${rule.__index}" title="Move Up">↑</button><button class="racf-move-btn racf-move-down" data-rule-index="${rule.__index}" title="Move Down">↓</button>` : '';
+                    li.innerHTML = `<div class="racf-rule-details"><span class="racf-rule-type-badge" title="${typeTitle}">${rule.type}</span><span class="racf-rule-text">${safeText}</span>${rule.isRegex ? `<small title="Regular Expression${caseTitle}">(R${rule.caseSensitive ? '' : 'i'})</small>` : ''}${rule.type === 'keyword' && !rule.isRegex && !rule.caseSensitive && !rule.normalize ? '<small title="Case Insensitive">(i)</small>' : ''}<small title="${targetTitle}">[${rule.target || 'both'}]</small>${rule.normalize ? `<small title="${normTitle}">(Norm)</small>` : ''}</div><div><button class="racf-remove-btn" data-rule-index="${rule.__index}" title="Remove Rule">X</button>${positionControls}</div>`;
                     ruleListEl.appendChild(li);
                 });
                 const ruleCountEl = q('#racf-rule-count'); if (ruleCountEl) ruleCountEl.textContent = (this.config.rules || []).length;
@@ -839,6 +956,10 @@
         // --- Filtering Logic (shouldFilterNode, extract*, filterNode, etc.) ---
         // (No changes needed in these core filtering functions)
         normalizeText(text) { if(typeof text !== 'string') return ''; try { return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); } catch (e) { this.log(`Error normalizing: ${e.message}`); return text.toLowerCase(); } }
+        runRuleTester(){ try { if(!this.shadowRoot) return; const q=(s)=>this.shadowRoot.querySelector(s); const input=q('#racf-tester-input'); const targetSel=q('#racf-tester-target'); const results=q('#racf-test-results'); if(!input||!targetSel||!results){return;} const text=(input.value||'').trim(); const target=targetSel.value||'both'; results.innerHTML=''; if(!text){results.innerHTML='<li>No text to test.</li>'; return;} const texts=[]; if(target==='title'||target==='both') texts.push({label:'title', value:text}); if(target==='body'||target==='both') texts.push({label:'body', value:text}); let matches=0; (this.config.rules||[]).forEach(rule=>{ if(rule.type!=='keyword') return; let did=false; const patt=rule.text||''; if(rule.isRegex){ const m=patt.match(/^\/(.+)\/([gimyus]*)$/); if(m){ try{ const rgx=new RegExp(m[1],m[2]); did=texts.some(t=>rgx.test(t.value)); }catch(_){} } } else { const uN=!!rule.normalize; const iCS=!!rule.caseSensitive; const cP=uN?this.normalizeText(patt):(iCS?patt:patt.toLowerCase()); did=texts.some(t=>{ const cCo=uN?this.normalizeText(t.value):(iCS?t.value:t.value.toLowerCase()); return cCo.includes(cP); }); }
+                if(did){ matches++; const safeText=this.domPurify.sanitize(rule.text||'', {USE_PROFILES:{html:false}}); const li=document.createElement('li'); li.innerHTML=`<div class=\"racf-rule-details\"><span class=\"racf-rule-type-badge\">${rule.type}</span><span class=\"racf-rule-text\">${safeText}</span>${rule.isRegex?`<small>(Regex)</small>`:''}${rule.normalize?`<small>(Norm)</small>`:''}${(rule.type==='keyword'&&!rule.isRegex&&!rule.caseSensitive&&!rule.normalize)?'<small>(i)</small>':''}<small>[${rule.target||'both'}]</small></div>`; results.appendChild(li); }
+            }); if(matches===0){results.innerHTML='<li>No rules matched.</li>'; } } catch(e){ this.log('Tester error: '+e.message); }
+        }
         handleAddRule() { const iE=this.shadowRoot.querySelector('#racf-rule-input'); const tE=this.shadowRoot.querySelector('#racf-rule-type'); const tgE=this.shadowRoot.querySelector('#racf-rule-target'); const nE=this.shadowRoot.querySelector('#racf-rule-normalize'); if(!iE||!tE||!tgE||!nE){alert("UI error");return;} const rIT=iE.value.trim(); const rT=tE.value; const rTg=tgE.value; const rN=nE.checked; if(!rIT){alert("Empty rule");iE.focus();return;} if(!RULE_TYPES.includes(rT)){alert("Bad type");return;} let txt=rIT; let isR=false; let cS=true; if(rT==='keyword'){if(txt.startsWith('/')&&txt.length>2){const lSI=txt.lastIndexOf('/');if(lSI>0){const p=txt.substring(1,lSI); const f=txt.substring(lSI+1);try{new RegExp(p,f);isR=true;cS=!f.includes('i');txt=txt;}catch(e){alert(`Bad Regex:${e.message}`);return;}}else{isR=false;cS=false;}}else{isR=false;cS=false;}}else if(rT==='user'||rT==='subreddit'){txt=txt.replace(/^(u\/|r\/)/i,'');isR=false;cS=false;txt=txt.toLowerCase();} if(rN&&rT==='keyword'&&!isR){cS=false;} const nR={type:rT,text:txt,isRegex:isR,caseSensitive:cS,target:rTg,normalize:(rT==='keyword'&&!isR&&rN)}; if(!this.config.rules)this.config.rules=[]; const rE=this.config.rules.some(r=>r.type===nR.type&&r.text===nR.text&&r.isRegex===nR.isRegex&&r.caseSensitive===nR.caseSensitive&&r.target===nR.target&&r.normalize===nR.normalize); if(rE){alert("Rule exists");iE.value='';return;} this.config.rules.push(nR); this.log(`Rule added: ${JSON.stringify(nR)}`); iE.value=''; nE.checked=false; tgE.value='both'; tE.value='keyword'; iE.focus(); this.saveConfigAndApplyFilters(); this.updateUI(); }
         removeRuleByIndex(index) { if(!this.config.rules||index<0||index>=this.config.rules.length){this.log(`Bad index ${index}`);return;} const rm=this.config.rules.splice(index,1); this.log(`Rule removed: ${JSON.stringify(rm[0])}`); this.saveConfigAndApplyFilters(); this.updateUI(); }
         handleFilterTypeChange(event) { const{value,checked}=event.target; if(!this.config.filterTypes)this.config.filterTypes=[]; const index=this.config.filterTypes.indexOf(value); if(checked&&index===-1){this.config.filterTypes.push(value);}else if(!checked&&index>-1){this.config.filterTypes.splice(index,1);} this.saveConfigAndApplyFilters(); }
