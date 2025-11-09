@@ -40,6 +40,7 @@ feat(import/export): preview de importación con Merge/Replace, backups y export
 - Backups automáticos: antes de Merge/Replace y al limpiar reglas, descarga backup con timestamp.
 - Export parcial: agrega selector de formato (Interno/External match.words) y botones “Export Rules” y “Export Lists”.
 - External rules export: comprime keywords no-regex en match.words y añade action/replaceWith.
+feat(import): Merge ahora también fusiona whitelist/blacklist (subreddits y users) con deduplicación case-insensitive.
 
 fix(import): elimina bloque suelto fuera del IIFE que impedía que los botones de preview (Merge/Replace/Descartar) funcionaran correctamente; los listeners ya viven dentro de addUIEventListeners en el Shadow DOM.
 fix(import): vuelve a cablear listeners de Merge/Replace/Descartar dentro de addUIEventListeners tras limpieza del bloque suelto.

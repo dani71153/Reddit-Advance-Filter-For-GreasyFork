@@ -993,6 +993,11 @@
                             <div><strong>Únicas (normalizadas):</strong> ${pi.uniqueIncoming}</div>
                             <div><strong>Duplicadas respecto a actuales:</strong> ${pi.duplicates}</div>
                             <div><strong>Reglas nuevas si merge:</strong> ${pi.newRules}</div>
+                            <div style="margin-top:6px;"><strong>Listas (añadidos con Merge):</strong></div>
+                            <div>Whitelist subreddits: +${pi.wlNewSubs||0}</div>
+                            <div>Whitelist users: +${pi.wlNewUsers||0}</div>
+                            <div>Blacklist subreddits: +${pi.blNewSubs||0}</div>
+                            <div>Blacklist users: +${pi.blNewUsers||0}</div>
                             <div><strong>Acción sugerida (archivo):</strong> ${this.domPurify.sanitize(action,{USE_PROFILES:{html:false}})}</div>
                             <div><strong>replaceText (archivo):</strong> ${this.domPurify.sanitize(repl,{USE_PROFILES:{html:false}}) || '<i>(vacío)</i>'}</div>
                             <small>Nota: Merge NO cambia acción global ni replaceText. Replace SÍ adopta los del archivo.</small>
@@ -1309,12 +1314,24 @@
             const existKeys = new Set(existing.map(r=>this.ruleKey(r)));
             const incomingUnique = this.dedupeRules(incoming);
             const newOnes = incomingUnique.filter(r=>!existKeys.has(this.ruleKey(r)));
+            // Compute list deltas for merge preview
+            const curWL = this.config.whitelist || { subreddits: [], users: [] };
+            const curBL = this.config.blacklist || { subreddits: [], users: [] };
+            const incWL = (nC.whitelist && typeof nC.whitelist==='object') ? nC.whitelist : { subreddits: [], users: [] };
+            const incBL = (nC.blacklist && typeof nC.blacklist==='object') ? nC.blacklist : { subreddits: [], users: [] };
+            const setOf = (arr)=> new Set(this.dedupeStrings(arr||[]));
+            const diffCount = (cur, inc)=>{ const sc=setOf(cur), si=setOf(inc); let c=0; si.forEach(v=>{ if(!sc.has(v)) c++; }); return c; };
+            const wlNewSubs = diffCount(curWL.subreddits, incWL.subreddits);
+            const wlNewUsers = diffCount(curWL.users, incWL.users);
+            const blNewSubs = diffCount(curBL.subreddits, incBL.subreddits);
+            const blNewUsers = diffCount(curBL.users, incBL.users);
             this.pendingImport = {
                 normalized: nC,
                 totalIncoming: incoming.length,
                 uniqueIncoming: incomingUnique.length,
                 duplicates: incomingUnique.length - newOnes.length,
-                newRules: newOnes.length
+                newRules: newOnes.length,
+                wlNewSubs, wlNewUsers, blNewSubs, blNewUsers
             };
             this.config.activeTab = 'imported';
             this.updateUI();
@@ -1346,14 +1363,29 @@
 
         ruleKey(r){ try { return `${r.type}|${r.isRegex?'R':'K'}|${r.caseSensitive?'S':'i'}|${r.normalize?'N':'n'}|${r.target||'both'}|${String(r.text).trim()}`; } catch(_){ return Math.random().toString(36).slice(2); } }
         dedupeRules(arr){ const seen=new Set(); const out=[]; (arr||[]).forEach(r=>{ const k=this.ruleKey(r); if(!seen.has(k)){ seen.add(k); out.push(r);} }); return out; }
+        dedupeStrings(arr){ const seen=new Set(); const out=[]; (arr||[]).forEach(v=>{ const s=String(v||'').trim().toLowerCase(); if(!s) return; if(!seen.has(s)){ seen.add(s); out.push(s);} }); return out; }
 
         applyPendingImportMerge(){ try{
                 if(!this.pendingImport || !this.pendingImport.normalized) { alert('No pending import.'); return; }
                 this.backupCurrentConfig('before-merge');
-                const incoming = this.dedupeRules(this.pendingImport.normalized.rules || []);
+                const nCAll = this.pendingImport.normalized;
+                const incoming = this.dedupeRules(nCAll.rules || []);
                 const merged = this.dedupeRules([...(this.config.rules||[]), ...incoming]);
                 this.config.rules = merged;
-                // Keep global settings on merge (no override)
+                // Merge whitelists/blacklists (dedupe, lowercase)
+                const curWL = this.config.whitelist || { subreddits: [], users: [] };
+                const incWL = (nCAll.whitelist && typeof nCAll.whitelist==='object') ? nCAll.whitelist : { subreddits: [], users: [] };
+                const curBL = this.config.blacklist || { subreddits: [], users: [] };
+                const incBL = (nCAll.blacklist && typeof nCAll.blacklist==='object') ? nCAll.blacklist : { subreddits: [], users: [] };
+                this.config.whitelist = {
+                    subreddits: this.dedupeStrings([...(curWL.subreddits||[]), ...(incWL.subreddits||[])]),
+                    users: this.dedupeStrings([...(curWL.users||[]), ...(incWL.users||[])])
+                };
+                this.config.blacklist = {
+                    subreddits: this.dedupeStrings([...(curBL.subreddits||[]), ...(incBL.subreddits||[])]),
+                    users: this.dedupeStrings([...(curBL.users||[]), ...(incBL.users||[])])
+                };
+                // Keep global action/replaceText on merge (no override)
                 this.saveConfigAndApplyFilters();
                 this.pendingImport = null;
                 this.updateUI();
